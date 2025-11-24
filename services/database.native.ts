@@ -1,68 +1,87 @@
-import type { User } from '@/services/types';
-import * as SQLite from 'expo-sqlite';
+// services/database.native.ts
+import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
+import type { User } from "./types";
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+// Ouvre / crée la BD native
+export const db: SQLiteDatabase = openDatabaseSync("trajets.db");
 
-async function openDb() {
-  if (!dbPromise) {
-    dbPromise = (async () => {
-      const db = await SQLite.openDatabaseAsync('trajets.db');
+// Création des tables
+export async function createTables() {
+  console.log("Creating SQLite tables...");
 
-      // Activer les clés étrangères (utile plus tard pour trips/positions)
-      await db.execAsync('PRAGMA foreign_keys = ON;');
+  await db.execAsync(`
+    PRAGMA journal_mode = WAL;
 
-      // Table users
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          firstName TEXT NOT NULL,
-          lastName TEXT NOT NULL,
-          email TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL
-        );
-      `);
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      firstName TEXT NOT NULL,
+      lastName TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    );
 
-      return db;
-    })();
-  }
-  return dbPromise;
+    CREATE TABLE IF NOT EXISTS trips (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      createdAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS positions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tripId INTEGER NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      timestamp TEXT NOT NULL,
+      FOREIGN KEY (tripId) REFERENCES trips(id)
+    );
+  `);
+
+  console.log("Tables created.");
 }
 
-// --- USERS ---
+/**
+ * Helpers génériques
+ */
+export function run(sql: string, params: any[] = []) {
+  return db.runAsync(sql, params);
+}
 
+export function getAll<T = any>(sql: string, params: any[] = []) {
+  return db.getAllAsync<T>(sql, params);
+}
+
+/**
+ * -------  FONCTIONS POUR AUTH  -------
+ */
+
+// Créer un utilisateur
 export async function createUser(data: {
   firstName: string;
   lastName: string;
   email: string;
   password: string;
 }): Promise<void> {
-  const db = await openDb();
-
   await db.runAsync(
-    `INSERT INTO users (firstName, lastName, email, password) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO users (firstName, lastName, email, password)
+     VALUES (?, ?, ?, ?);`,
     [data.firstName, data.lastName, data.email, data.password]
   );
 }
 
+// Trouver un user par email
 export async function getUserByEmail(email: string): Promise<User | null> {
-  const db = await openDb();
-
-  const row = await db.getFirstAsync<User>(
-    `SELECT * FROM users WHERE email = ?`,
+  const rows = await db.getAllAsync<User>(
+    `SELECT * FROM users WHERE email = ? LIMIT 1;`,
     [email]
   );
-
-  return row ?? null;
+  return rows[0] ?? null;
 }
 
-export async function updateUserPassword(
-  userId: number,
-  newPassword: string
-): Promise<void> {
-  const db = await openDb();
-
+// Mettre à jour le mot de passe
+export async function updateUserPassword(userId: number, newPassword: string) {
   await db.runAsync(
-    `UPDATE users SET password = ? WHERE id = ?`,
+    `UPDATE users SET password = ? WHERE id = ?;`,
     [newPassword, userId]
   );
 }
