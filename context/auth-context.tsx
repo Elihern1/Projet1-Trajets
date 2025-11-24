@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, type ReactNode } from 'react';
 import type { User } from '@/services/types';
-import { createUser, getUserByEmail, updateUserPassword } from '@/services/database';
+import { createUser, getUserByEmail, updateUserPassword } from '@/services/database.native';
 
 type RegisterData = {
   firstName: string;
