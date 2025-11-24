@@ -16,11 +16,25 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          {/* Écran login (app/index.tsx) sera le "root" */}
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack screenOptions={{ headerShown: false }}>
+
+          {/* Auth screens */}
+          <Stack.Screen name="index" />            {/* Login */}
+          <Stack.Screen name="register" />         {/* Register */}
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="change-password" />
+          <Stack.Screen name="version" />
+
+          {/* Tabs */}
+          <Stack.Screen name="(tabs)" />
+
+          {/* Trips */}
+          <Stack.Screen name="trips/index" />
+          <Stack.Screen name="trips/new" />
+          <Stack.Screen name="trips/details" />
+
         </Stack>
+
         <StatusBar style="auto" />
       </ThemeProvider>
     </AuthProvider>

@@ -39,7 +39,8 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-maps"
     ],
     "experiments": {
       "typedRoutes": true,
