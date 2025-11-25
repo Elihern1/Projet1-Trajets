@@ -7,10 +7,12 @@ password: string;
 };
 export type Trip = {
   id: number;
-  userId: number;
+  userId: number | null;
   name: string;
   description?: string;
   createdAt: string; // 'yyyy-MM-dd HH:mm:ss'
+  userFirstName?: string;
+  userLastName?: string;
 };
 
 export type Position = {

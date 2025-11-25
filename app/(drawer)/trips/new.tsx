@@ -1,18 +1,21 @@
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Button,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from "react-native";
+import MapView, { Marker, Polyline, type Region } from "react-native-maps";
+import { useFocusEffect } from "expo-router";
 
 import { useTrips } from "@/context/trips-context";
 import type { Position } from "@/services/types";
+import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/themed-text";
 
 export default function NewTripScreen() {
   const router = useRouter();
@@ -30,6 +33,15 @@ export default function NewTripScreen() {
 
   // Permet de limiter les enregistrements à 1 fois / 5 secondes
   const lastSavedRef = useRef(0);
+
+  // Réinitialise l'écran à chaque focus pour éviter de voir l'ancien trajet
+  useFocusEffect(
+    useCallback(() => {
+      setPositions([]);
+      setTripCreatedAt(null);
+      lastSavedRef.current = 0;
+    }, [])
+  );
 
   // Nettoyer le watcher quand l'écran se démonte
   useEffect(() => {
@@ -170,14 +182,25 @@ export default function NewTripScreen() {
     }
   }
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Nouveau trajet</Text>
+  const previewRegion: Region | null = useMemo(() => {
+    if (positions.length === 0) return null;
+    const last = positions[positions.length - 1];
+    return {
+      latitude: last.latitude,
+      longitude: last.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  }, [positions]);
 
-      <Text style={styles.label}>Nom du trajet</Text>
+  return (
+    <ThemedView style={styles.container}>
+      <ThemedText type="title" style={styles.title}>Nouveau trajet</ThemedText>
+
+      <ThemedText style={styles.label}>Nom du trajet</ThemedText>
       <TextInput style={styles.input} value={name} onChangeText={setName} />
 
-      <Text style={styles.label}>Description</Text>
+      <ThemedText style={styles.label}>Description</ThemedText>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={description}
@@ -189,6 +212,44 @@ export default function NewTripScreen() {
         <ActivityIndicator />
       ) : (
         <>
+          {!recording && positions.length > 0 && previewRegion && (
+            <View style={styles.previewBox}>
+              <ThemedText style={styles.previewTitle}>Aperçu du trajet</ThemedText>
+              <MapView style={styles.map} initialRegion={previewRegion}>
+                {positions.length > 1 && (
+                  <Polyline
+                    coordinates={positions.map((p) => ({
+                      latitude: p.latitude,
+                      longitude: p.longitude,
+                    }))}
+                    strokeColor="#2563eb"
+                    strokeWidth={5}
+                  />
+                )}
+                {positions[0] && (
+                  <Marker
+                    coordinate={{
+                      latitude: positions[0].latitude,
+                      longitude: positions[0].longitude,
+                    }}
+                    pinColor="green"
+                    title="Départ"
+                  />
+                )}
+                {positions[positions.length - 1] && (
+                  <Marker
+                    coordinate={{
+                      latitude: positions[positions.length - 1].latitude,
+                      longitude: positions[positions.length - 1].longitude,
+                    }}
+                    pinColor="red"
+                    title="Arrivée"
+                  />
+                )}
+              </MapView>
+            </View>
+          )}
+
           {!recording ? (
             <Button title="Démarrer l’enregistrement" onPress={startRecording} />
           ) : (
@@ -206,19 +267,16 @@ export default function NewTripScreen() {
           )}
         </>
       )}
-    </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: "#f5f7fb",
+    padding: 24,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "700",
     marginBottom: 12,
   },
   label: {
@@ -238,5 +296,23 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 60,
     textAlignVertical: "top",
+  },
+  previewBox: {
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  previewTitle: {
+    padding: 10,
+    fontWeight: "700",
+  },
+  map: {
+    height: 220,
+    width: "100%",
   },
 });

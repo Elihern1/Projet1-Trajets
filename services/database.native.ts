@@ -5,8 +5,15 @@ import type { User } from "./types";
 // Ouvre / crée la BD native
 export const db: SQLiteDatabase = openDatabaseSync("trajets.db");
 
+let createTablesPromise: Promise<void> | null = null;
+
 // Création des tables
 export async function createTables() {
+  if (createTablesPromise) {
+    return createTablesPromise;
+  }
+
+  createTablesPromise = (async () => {
   console.log("Creating SQLite tables...");
 
   await db.execAsync(`
@@ -22,9 +29,11 @@ export async function createTables() {
 
     CREATE TABLE IF NOT EXISTS trips (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
       name TEXT NOT NULL,
       description TEXT,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (userId) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS positions (
@@ -37,7 +46,28 @@ export async function createTables() {
     );
   `);
 
+  const tripColumns = await db.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(trips);`
+  );
+  const hasUserId = tripColumns.some((c) => c.name === "userId");
+  if (!hasUserId) {
+    try {
+      await db.execAsync(
+        "ALTER TABLE trips ADD COLUMN userId INTEGER REFERENCES users(id);"
+      );
+    } catch (err: any) {
+      // Ignore if another caller already added the column in parallel
+      if (!String(err?.message ?? "").includes("duplicate column name")) {
+        createTablesPromise = null;
+        throw err;
+      }
+    }
+  }
+
   console.log("Tables created.");
+  })();
+
+  return createTablesPromise;
 }
 
 /**

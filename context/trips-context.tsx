@@ -1,14 +1,19 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { db, run, getAll } from "@/services/database.native";
+import { run, getAll, createTables } from "@/services/database.native";
 import type { Trip, Position } from "@/services/types";
+import { useAuth } from "./auth-context";
 
 type TripsContextType = {
   trips: Trip[];
   loadTrips: () => Promise<void>;
-  createTrip: (data: { name: string; description: string }) => Promise<number>;
+  createTrip: (data: {
+    name: string;
+    description: string;
+    createdAt?: string;
+  }) => Promise<number>;
   addPositionToTrip: (
     tripId: number,
-    pos: { latitude: number; longitude: number }
+    pos: { latitude: number; longitude: number; timestamp?: string }
   ) => Promise<void>;
   getTripById: (id: number) => Promise<Trip | null>;
   getPositionsForTrip: (id: number) => Promise<Position[]>;
@@ -19,41 +24,84 @@ type TripsContextType = {
 const TripsContext = createContext<TripsContextType | undefined>(undefined);
 
 export function TripsProvider({ children }: { children: any }) {
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
 
   async function loadTrips() {
-    const rows = await getAll<Trip>("SELECT * FROM trips ORDER BY id DESC;");
+    await createTables();
+    const rows = await getAll<Trip>(
+      `
+        SELECT t.*, u.firstName AS userFirstName, u.lastName AS userLastName
+        FROM trips t
+        LEFT JOIN users u ON u.id = t.userId
+        ORDER BY t.id DESC;
+      `
+    );
     setTrips(rows);
   }
 
-  async function createTrip(data: { name: string; description: string }) {
+  async function createTrip(data: {
+    name: string;
+    description: string;
+    createdAt?: string;
+  }) {
+    if (!user) {
+      throw new Error("Vous devez être connecté pour créer un trajet");
+    }
+
+    await createTables();
     await run(
-      `INSERT INTO trips (name, description, createdAt)
-       VALUES (?, ?, datetime('now'));`,
-      [data.name, data.description]
+      `INSERT INTO trips (userId, name, description, createdAt)
+       VALUES (?, ?, ?, COALESCE(?, datetime('now')));`,
+      [user.id, data.name, data.description, data.createdAt ?? null]
     );
 
     const row = await getAll<{ id: number }>(
-      "SELECT id FROM trips ORDER BY id DESC LIMIT 1;"
+      "SELECT last_insert_rowid() AS id;"
     );
 
     await loadTrips();
     return row[0].id;
   }
 
+  async function ensureOwnTrip(tripId: number) {
+    if (!user) {
+      throw new Error("Vous devez être connecté");
+    }
+
+    const ownerRow = await getAll<{ userId: number | null }>(
+      "SELECT userId FROM trips WHERE id = ?;",
+      [tripId]
+    );
+
+    const ownerId = ownerRow[0]?.userId ?? null;
+    if (ownerId !== user.id) {
+      throw new Error("Vous ne pouvez modifier que vos trajets.");
+    }
+  }
+
   async function addPositionToTrip(
     tripId: number,
-    pos: { latitude: number; longitude: number }
+    pos: { latitude: number; longitude: number; timestamp?: string }
   ) {
+    await ensureOwnTrip(tripId);
     await run(
       `INSERT INTO positions (tripId, latitude, longitude, timestamp)
-       VALUES (?, ?, ?, datetime('now'));`,
-      [tripId, pos.latitude, pos.longitude]
+       VALUES (?, ?, ?, COALESCE(?, datetime('now')));`,
+      [tripId, pos.latitude, pos.longitude, pos.timestamp ?? null]
     );
   }
 
   async function getTripById(id: number) {
-    const rows = await getAll<Trip>("SELECT * FROM trips WHERE id = ?;", [id]);
+    const rows = await getAll<Trip>(
+      `
+        SELECT t.*, u.firstName AS userFirstName, u.lastName AS userLastName
+        FROM trips t
+        LEFT JOIN users u ON u.id = t.userId
+        WHERE t.id = ?;
+      `,
+      [id]
+    );
     return rows[0] ?? null;
   }
 
@@ -72,6 +120,7 @@ export function TripsProvider({ children }: { children: any }) {
   }
 
   async function updateTrip(trip: Trip) {
+    await ensureOwnTrip(trip.id);
     await run(
       `UPDATE trips SET name = ?, description = ? WHERE id = ?;`,
       [trip.name, trip.description, trip.id]
@@ -80,6 +129,7 @@ export function TripsProvider({ children }: { children: any }) {
   }
 
   async function deleteTrip(id: number) {
+    await ensureOwnTrip(id);
     await run("DELETE FROM positions WHERE tripId = ?;", [id]);
     await run("DELETE FROM trips WHERE id = ?;", [id]);
     await loadTrips();

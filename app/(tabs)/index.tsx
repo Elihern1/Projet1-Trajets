@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useTrips } from "@/context/trips-context";
+import type { Trip } from "@/services/types";
 
 
 export default function TripsListScreen() {
@@ -16,13 +17,12 @@ export default function TripsListScreen() {
   const { trips, loadTrips, getPositionsForTrip } = useTrips();
 
   const [loading, setLoading] = useState(true);
-  const [enriched, setEnriched] = useState<any[]>([]);
+  const [enriched, setEnriched] = useState<
+    (Trip & { positionsCount: number; lastTimestamp: string | null })[]
+  >([]);
 
   async function fetchData() {
     setLoading(true);
-
-    // recharge la liste brute
-    await loadTrips();
 
     // enrichit chaque trajet avec le nombre de positions
     const fullList = [];
@@ -41,7 +41,7 @@ export default function TripsListScreen() {
 
   useEffect(() => {
     fetchData();
-  }, [trips.length]);
+  }, [trips]);
 
   if (loading) {
     return (
@@ -86,6 +86,13 @@ export default function TripsListScreen() {
             {item.lastTimestamp && (
               <Text style={styles.itemSub}>🕒 {item.lastTimestamp}</Text>
             )}
+
+            <Text style={styles.itemSub}>
+              👤{" "}
+              {item.userFirstName || item.userLastName
+                ? `${item.userFirstName ?? ""} ${item.userLastName ?? ""}`.trim()
+                : "Utilisateur inconnu"}
+            </Text>
           </TouchableOpacity>
         )}
       />

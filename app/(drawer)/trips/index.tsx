@@ -10,22 +10,23 @@ import {
 import { useRouter } from "expo-router";
 
 import { useTrips } from "@/context/trips-context";
+import { useAuth } from "@/context/auth-context";
 import type { Trip } from "@/services/types";
 import { createTables, getAll } from "@/services/database.native";
+import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/themed-text";
 
 type TripWithCount = Trip & { positionsCount: number };
 
 export default function TripsListScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { trips, loadTrips, deleteTrip } = useTrips();
   const [items, setItems] = useState<TripWithCount[]>([]);
 
   async function loadWithCounts() {
     // S'assure que les tables existent
     await createTables();
-
-    // Recharge les trajets depuis la BD (met à jour le contexte)
-    await loadTrips();
 
     // Récupère le nombre de positions par trajet
     const counts = await getAll<{ tripId: number; count: number }>(
@@ -46,9 +47,17 @@ export default function TripsListScreen() {
 
   useEffect(() => {
     loadWithCounts().catch((err) => console.error("load trips error", err));
-  }, [trips.length]);
+  }, [trips]);
 
   function confirmDelete(trip: TripWithCount) {
+    if (trip.userId !== user?.id) {
+      Alert.alert(
+        "Action non autorisée",
+        "Tu ne peux supprimer que tes propres trajets."
+      );
+      return;
+    }
+
     Alert.alert(
       "Supprimer",
       `Voulez-vous supprimer le trajet "${trip.name}" ?`,
@@ -76,9 +85,9 @@ export default function TripsListScreen() {
   }
 
   return (
-    <View style={styles.container}>  
+    <ThemedView style={styles.container}>  
 
-      <Text style={styles.title}>Mes trajets</Text>
+      <ThemedText type="title">Mes trajets</ThemedText>
 
       <TouchableOpacity style={styles.newButton} onPress={goToNewTrip}>
         <Text style={styles.newButtonText}>+ Nouveau trajet</Text>
@@ -95,9 +104,11 @@ export default function TripsListScreen() {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{item.name}</Text>
-              <TouchableOpacity onPress={() => confirmDelete(item)}>
-                <Text style={styles.deleteText}>Supprimer</Text>
-              </TouchableOpacity>
+              {item.userId === user?.id && (
+                <TouchableOpacity onPress={() => confirmDelete(item)}>
+                  <Text style={styles.deleteText}>Supprimer</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {!!item.description && (
@@ -105,7 +116,11 @@ export default function TripsListScreen() {
             )}
 
             <Text style={styles.meta}>
-              Positions : {item.positionsCount} • Créé le {item.createdAt}
+              Positions : {item.positionsCount} • Créé par{" "}
+              {item.userFirstName || item.userLastName
+                ? `${item.userFirstName ?? ""} ${item.userLastName ?? ""}`.trim()
+                : "Utilisateur inconnu"}{" "}
+              le {item.createdAt}
             </Text>
           </TouchableOpacity>
         )}
@@ -116,15 +131,14 @@ export default function TripsListScreen() {
           </Text>
         }
       />
-    </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: "#f5f7fb",
+    padding: 24,
   },
 
   backButton: {
@@ -140,11 +154,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
+  title: {},
   newButton: {
     backgroundColor: "#2563eb",
     paddingVertical: 10,
