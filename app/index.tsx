@@ -1,3 +1,4 @@
+import { useTheme } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -10,7 +11,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -25,21 +25,24 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  // Redirection si user déjà connecté
   useEffect(() => {
     if (user) {
-      router.replace('/(tabs)');
+      router.replace('/trips');
     }
   }, [user, router]);
 
   async function handleLogin() {
-    if (!email.trim() || !password) {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password) {
       Alert.alert('Erreur', 'Email et mot de passe sont obligatoires.');
       return;
     }
 
     try {
-      await login(email.trim(), password);
-      router.replace('/(tabs)');
+      await login(trimmedEmail, password);
+      router.replace('/trips');
     } catch (e: any) {
       Alert.alert('Connexion impossible', e.message ?? 'Erreur inconnue');
     }
@@ -56,6 +59,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* En-tête */}
           <View style={styles.header}>
             <ThemedText type="title">Trajets</ThemedText>
             <ThemedText type="subtitle" style={styles.subtitle}>
@@ -63,10 +67,20 @@ export default function LoginScreen() {
             </ThemedText>
           </View>
 
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Card */}
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <ThemedText type="subtitle">Connexion</ThemedText>
 
             <View style={styles.form}>
+              {/* Email */}
               <ThemedText>Email</ThemedText>
               <TextInput
                 style={[
@@ -82,10 +96,11 @@ export default function LoginScreen() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="email@exemple.com"
-                placeholderTextColor={colors.text}
+                placeholderTextColor={colors.text + '88'}
                 cursorColor={colors.text}
               />
 
+              {/* Mot de passe */}
               <ThemedText>Mot de passe</ThemedText>
               <TextInput
                 style={[
@@ -100,10 +115,11 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="••••••••"
-                placeholderTextColor={colors.text}
+                placeholderTextColor={colors.text + '88'}
                 cursorColor={colors.text}
               />
 
+              {/* Bouton connexion */}
               <Pressable
                 style={[styles.primaryButton, { backgroundColor: primary }]}
                 onPress={handleLogin}
@@ -111,6 +127,7 @@ export default function LoginScreen() {
                 <ThemedText style={styles.primaryButtonText}>Se connecter</ThemedText>
               </Pressable>
 
+              {/* Lien inscription */}
               <View style={styles.footerRow}>
                 <ThemedText>Pas de compte ?</ThemedText>
                 <Link href="/register">
