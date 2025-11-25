@@ -58,10 +58,17 @@ export function TripsProvider({ children }: { children: any }) {
   }
 
   async function getPositionsForTrip(id: number) {
-    return await getAll<Position>(
+    const rows = await getAll<Position>(
       "SELECT * FROM positions WHERE tripId = ? ORDER BY id ASC;",
       [id]
     );
+
+    // 🔥 Correction : convertir en nombres pour MapView
+    return rows.map((p) => ({
+      ...p,
+      latitude: Number(p.latitude),
+      longitude: Number(p.longitude),
+    }));
   }
 
   async function updateTrip(trip: Trip) {

@@ -13,17 +13,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Si déjà connecté, redirige vers les tabs
+  // Si déjà connecté → redirige vers l'écran TRIPS, pas les tabs
   useEffect(() => {
     if (user) {
-      router.replace('/(tabs)');
+      router.replace('/trips');
     }
-  }, [user, router]);
+  }, [user]);
 
   async function handleLogin() {
     try {
       await login(email.trim(), password);
-      router.replace('/(tabs)');
+      router.replace('/trips');
     } catch (e: any) {
       Alert.alert('Connexion impossible', e.message ?? 'Erreur inconnue');
     }

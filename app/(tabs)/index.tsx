@@ -10,6 +10,7 @@ import {
 import { useRouter } from "expo-router";
 import { useTrips } from "@/context/trips-context";
 
+
 export default function TripsListScreen() {
   const router = useRouter();
   const { trips, loadTrips, getPositionsForTrip } = useTrips();

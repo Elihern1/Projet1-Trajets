@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Marker, Region, Polyline } from "react-native-maps";
 
 import { useTrips } from "@/context/trips-context";
 import type { Trip, Position } from "@/services/types";
@@ -28,7 +28,7 @@ export default function TripDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Charger le trajet + les positions
+  // Charger le trajet et ses positions
   async function load() {
     try {
       setLoading(true);
@@ -36,8 +36,8 @@ export default function TripDetailsScreen() {
       const pos = await getPositionsForTrip(tripId);
       setTrip(t);
       setPositions(pos);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
       Alert.alert("Erreur", "Impossible de charger le trajet.");
     } finally {
       setLoading(false);
@@ -48,8 +48,8 @@ export default function TripDetailsScreen() {
     load();
   }, [tripId]);
 
-  // Region initiale pour la carte
-  const initialRegion: Region | undefined = useMemo(() => {
+  // Région initiale centrée sur l'arrivée (ou Montréal)
+  const initialRegion: Region = useMemo(() => {
     if (positions.length > 0) {
       const last = positions[positions.length - 1];
       return {
@@ -59,8 +59,6 @@ export default function TripDetailsScreen() {
         longitudeDelta: 0.01,
       };
     }
-
-    // Valeur par défaut (ex.: Montréal)
     return {
       latitude: 45.5017,
       longitude: -73.5673,
@@ -75,8 +73,8 @@ export default function TripDetailsScreen() {
       setSaving(true);
       await updateTrip(trip);
       Alert.alert("Succès", "Trajet mis à jour.");
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
       Alert.alert("Erreur", "Impossible de mettre à jour le trajet.");
     } finally {
       setSaving(false);
@@ -84,40 +82,46 @@ export default function TripDetailsScreen() {
   }
 
   async function handleDelete() {
-    Alert.alert(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer ce trajet ?",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteTrip(tripId);
-              router.back();
-            } catch (e) {
-              console.error(e);
-              Alert.alert("Erreur", "Impossible de supprimer le trajet.");
-            }
-          },
+    Alert.alert("Supprimer", "Supprimer ce trajet ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          await deleteTrip(tripId);
+          router.back();
         },
-      ]
-    );
+      },
+    ]);
   }
 
   if (loading || !trip) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
-        <Text>Chargement du trajet...</Text>
+        <Text>Chargement...</Text>
       </View>
     );
   }
 
+  // Position départ et arrivée
+  const start = positions[0];
+  const end = positions[positions.length - 1];
+
   return (
     <View style={styles.container}>
-      {/* Infos du trajet */}
+
+      {/* Bouton Retour */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => router.push("/trips")}
+>
+      <Text style={styles.backText}>← Retour</Text>
+      </TouchableOpacity>
+
+
+
+      {/* Infos trajet */}
       <Text style={styles.label}>Nom</Text>
       <TextInput
         style={styles.input}
@@ -133,35 +137,55 @@ export default function TripDetailsScreen() {
         multiline
       />
 
-      {/* Carte */}
-      <Text style={styles.label}>Carte</Text>
-      <MapView
-        style={styles.map}
-        initialRegion={initialRegion}
-      >
-        {positions.map((pos) => (
-          <Marker
-            key={pos.id}
-            coordinate={{
-              latitude: pos.latitude,
-              longitude: pos.longitude,
-            }}
-            title={new Date(pos.timestamp).toLocaleString()}
+      {/* MAP */}
+      <Text style={styles.label}>Carte du trajet</Text>
+
+      <MapView style={styles.map} initialRegion={initialRegion}>
+
+        {/* Trajet complet */}
+        {positions.length > 1 && (
+          <Polyline
+            coordinates={positions.map((p) => ({
+              latitude: p.latitude,
+              longitude: p.longitude,
+            }))}
+            strokeColor="#2563eb"
+            strokeWidth={5}
           />
-        ))}
+        )}
+
+        {/* Départ */}
+        {start && (
+          <Marker
+            coordinate={{ latitude: start.latitude, longitude: start.longitude }}
+            pinColor="green"
+            title="Départ"
+            description={new Date(start.timestamp).toLocaleString()}
+          />
+        )}
+
+        {/* Arrivée */}
+        {end && (
+          <Marker
+            coordinate={{ latitude: end.latitude, longitude: end.longitude }}
+            pinColor="red"
+            title="Arrivée"
+            description={new Date(end.timestamp).toLocaleString()}
+          />
+        )}
+
       </MapView>
 
       {/* Liste des positions */}
-      <Text style={styles.label}>Positions ({positions.length})</Text>
+      <Text style={styles.label}>Positions : {positions.length}</Text>
+
       <FlatList
-        style={styles.list}
         data={positions}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item, index }) => (
           <View style={styles.positionRow}>
             <Text style={styles.positionTitle}>
-              #{index + 1} - {item.latitude.toFixed(5)},{" "}
-              {item.longitude.toFixed(5)}
+              #{index + 1} — {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
             </Text>
             <Text style={styles.positionSub}>
               {new Date(item.timestamp).toLocaleString()}
@@ -172,67 +196,58 @@ export default function TripDetailsScreen() {
 
       {/* Boutons */}
       <View style={styles.buttonsRow}>
-        <Button title={saving ? "Enregistrement..." : "Sauvegarder"} onPress={handleSave} />
+        <Button
+          title={saving ? "Sauvegarde..." : "Sauvegarder"}
+          onPress={handleSave}
+        />
         <View style={{ height: 8 }} />
         <Button title="Supprimer" color="red" onPress={handleDelete} />
       </View>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#f3f4f6",
+  container: { flex: 1, padding: 16, backgroundColor: "#f3f4f6" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  backButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#e5e7eb",
+    borderRadius: 6,
+    marginBottom: 8,
   },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: {
-    fontWeight: "600",
-    marginTop: 12,
-    marginBottom: 4,
-  },
+  backText: { fontSize: 16, fontWeight: "600" },
+
+  label: { marginTop: 12, marginBottom: 4, fontWeight: "600" },
   input: {
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    padding: 10,
     backgroundColor: "white",
   },
-  textArea: {
-    minHeight: 60,
-    textAlignVertical: "top",
-  },
+  textArea: { minHeight: 60, textAlignVertical: "top" },
+
   map: {
+    height: 250,
     width: "100%",
-    height: 200, // IMPORTANT: sans hauteur la carte n’apparaît pas
     borderRadius: 12,
     marginTop: 6,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  list: {
-    flexGrow: 0,
-  },
+
   positionRow: {
-    backgroundColor: "white",
     padding: 8,
-    borderRadius: 8,
+    backgroundColor: "white",
     marginBottom: 6,
+    borderRadius: 8,
   },
-  positionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  positionSub: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  buttonsRow: {
-    marginTop: 16,
-  },
+  positionTitle: { fontWeight: "600" },
+  positionSub: { fontSize: 12, color: "#6b7280" },
+
+  buttonsRow: { marginTop: 12 },
 });

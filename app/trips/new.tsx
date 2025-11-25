@@ -26,7 +26,18 @@ export default function NewTripScreen() {
   );
   const [loading, setLoading] = useState(false);
 
+  // Nettoyer le watcher quand l'écran est démonté
+  useEffect(() => {
+    return () => {
+      if (watcher) {
+        watcher.remove();
+      }
+    };
+  }, [watcher]);
+
   async function startRecording() {
+    if (recording) return;
+
     if (!name.trim()) {
       Alert.alert("Erreur", "Entre un nom pour le trajet.");
       return;
@@ -34,44 +45,67 @@ export default function NewTripScreen() {
 
     setLoading(true);
 
-    // Permission GPS
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission manquante", "Active la localisation pour continuer.");
-      setLoading(false);
-      return;
-    }
-
-    // 1) On crée le trajet dans la BD
-    const tripId = await createTrip({
-      name: name.trim(),
-      description: description.trim(),
-    });
-
-    // 2) On commence à écouter la position en temps réel
-    const sub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000, // toutes les 5 secondes
-        distanceInterval: 0,
-      },
-      async (loc) => {
-        if (loc?.coords) {
-          await addPositionToTrip(tripId, {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
-        }
+    try {
+      // 1) Demander la permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission manquante",
+          "Active la localisation pour continuer."
+        );
+        setLoading(false);
+        return;
       }
-    );
 
-    setWatcher(sub);
-    setRecording(true);
-    setLoading(false);
+      // 2) Vérifier si le service de localisation est activé
+      const enabled = await Location.hasServicesEnabledAsync();
+      if (!enabled) {
+        Alert.alert(
+          "GPS désactivé",
+          "Active le GPS sur ton téléphone pour enregistrer le trajet."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 3) Créer le trajet
+      const tripId = await createTrip({
+        name: name.trim(),
+        description: description.trim(),
+      });
+
+      // 4) Commencer à écouter la position en temps réel
+      const sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000, // toutes les 5 secondes
+          distanceInterval: 0,
+        },
+        async (loc) => {
+          if (loc?.coords) {
+            console.log("POSITION RECUE :", loc.coords);
+            await addPositionToTrip(tripId, {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+          }
+        }
+      );
+
+      setWatcher(sub);
+      setRecording(true);
+    } catch (err) {
+      console.error("Erreur startRecording", err);
+      Alert.alert("Erreur", "Impossible de démarrer l’enregistrement.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function stopRecording() {
-    if (watcher) watcher.remove();
+    if (watcher) {
+      watcher.remove();
+    }
     setWatcher(null);
     setRecording(false);
 

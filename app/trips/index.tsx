@@ -1,4 +1,3 @@
-// app/trips/index.tsx
 import { useEffect, useState } from "react";
 import {
   View,
@@ -68,10 +67,8 @@ export default function TripsListScreen() {
   }
 
   function openDetails(trip: TripWithCount) {
-    router.push({
-      pathname: "/trips/details",
-      params: { id: String(trip.id) },
-    });
+    router.push(`/trips/details?id=${trip.id}`);
+
   }
 
   function goToNewTrip() {
@@ -79,7 +76,8 @@ export default function TripsListScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container}>  
+
       <Text style={styles.title}>Mes trajets</Text>
 
       <TouchableOpacity style={styles.newButton} onPress={goToNewTrip}>
@@ -128,6 +126,20 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#f5f7fb",
   },
+
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+    marginBottom: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
   title: {
     fontSize: 22,
     fontWeight: "700",
