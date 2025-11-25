@@ -1,20 +1,24 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   ActivityIndicator,
   Button,
-  FlatList,
   Alert,
   TouchableOpacity,
+  Keyboard,
+  TouchableWithoutFeedback,
+  ScrollView,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MapView, { Marker, Region, Polyline } from "react-native-maps";
 
 import { useTrips } from "@/context/trips-context";
 import type { Trip, Position } from "@/services/types";
+import { useAuth } from "@/context/auth-context";
+import { ThemedView } from "@/components/themed-view";
+import { ThemedText } from "@/components/themed-text";
 
 export default function TripDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,6 +26,7 @@ export default function TripDetailsScreen() {
   const router = useRouter();
   const { getTripById, getPositionsForTrip, updateTrip, deleteTrip } =
     useTrips();
+  const { user } = useAuth();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -69,6 +74,13 @@ export default function TripDetailsScreen() {
 
   async function handleSave() {
     if (!trip) return;
+    if (trip.userId !== user?.id) {
+      Alert.alert(
+        "Action non autorisée",
+        "Tu ne peux modifier que tes propres trajets."
+      );
+      return;
+    }
     try {
       setSaving(true);
       await updateTrip(trip);
@@ -82,6 +94,14 @@ export default function TripDetailsScreen() {
   }
 
   async function handleDelete() {
+    if (trip?.userId !== user?.id) {
+      Alert.alert(
+        "Action non autorisée",
+        "Tu ne peux supprimer que tes propres trajets."
+      );
+      return;
+    }
+
     Alert.alert("Supprimer", "Supprimer ce trajet ?", [
       { text: "Annuler", style: "cancel" },
       {
@@ -99,7 +119,7 @@ export default function TripDetailsScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
-        <Text>Chargement...</Text>
+        <ThemedText>Chargement...</ThemedText>
       </View>
     );
   }
@@ -107,38 +127,59 @@ export default function TripDetailsScreen() {
   // Position départ et arrivée
   const start = positions[0];
   const end = positions[positions.length - 1];
+  const creatorLabel =
+    trip.userFirstName || trip.userLastName
+      ? `${trip.userFirstName ?? ""} ${trip.userLastName ?? ""}`.trim()
+      : "Utilisateur inconnu";
+  const isOwner = trip.userId === user?.id;
 
   return (
-    <View style={styles.container}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <ThemedView style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
 
       {/* Bouton Retour */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.push("/trips")}
->
-      <Text style={styles.backText}>← Retour</Text>
+      >
+        <ThemedText style={styles.backText}>← Retour</ThemedText>
       </TouchableOpacity>
 
 
 
       {/* Infos trajet */}
-      <Text style={styles.label}>Nom</Text>
+      <ThemedText style={styles.owner}>
+        Créé par {creatorLabel} — {isOwner ? "tu es le propriétaire" : "lecture seule"}
+      </ThemedText>
+
+      <ThemedText style={styles.label}>Nom</ThemedText>
       <TextInput
         style={styles.input}
         value={trip.name}
         onChangeText={(text) => setTrip({ ...trip, name: text })}
+        editable={isOwner}
+        placeholder="Nom du trajet"
+        placeholderTextColor="#9ca3af"
       />
 
-      <Text style={styles.label}>Description</Text>
+      <ThemedText style={styles.label}>Description</ThemedText>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={trip.description ?? ""}
         onChangeText={(text) => setTrip({ ...trip, description: text })}
         multiline
+        editable={isOwner}
+        placeholder="Description"
+        placeholderTextColor="#9ca3af"
       />
 
       {/* MAP */}
-      <Text style={styles.label}>Carte du trajet</Text>
+      <ThemedText style={styles.label}>Carte du trajet</ThemedText>
 
       <MapView style={styles.map} initialRegion={initialRegion}>
 
@@ -177,40 +218,53 @@ export default function TripDetailsScreen() {
       </MapView>
 
       {/* Liste des positions */}
-      <Text style={styles.label}>Positions : {positions.length}</Text>
+      <ThemedText style={styles.label}>Positions : {positions.length}</ThemedText>
 
-      <FlatList
-        data={positions}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={({ item, index }) => (
-          <View style={styles.positionRow}>
-            <Text style={styles.positionTitle}>
-              #{index + 1} — {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
-            </Text>
-            <Text style={styles.positionSub}>
-              {new Date(item.timestamp).toLocaleString()}
-            </Text>
-          </View>
-        )}
-      />
+      {positions.map((item, index) => (
+        <View key={item.id ?? index} style={styles.positionRow}>
+          <ThemedText style={styles.positionTitle}>
+            #{index + 1} — {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
+          </ThemedText>
+          <ThemedText style={styles.positionSub}>
+            {new Date(item.timestamp).toLocaleString()}
+          </ThemedText>
+        </View>
+      ))}
 
       {/* Boutons */}
-      <View style={styles.buttonsRow}>
-        <Button
-          title={saving ? "Sauvegarde..." : "Sauvegarder"}
-          onPress={handleSave}
-        />
-        <View style={{ height: 8 }} />
-        <Button title="Supprimer" color="red" onPress={handleDelete} />
-      </View>
+        </ScrollView>
 
-    </View>
+        <View style={styles.buttonsRow}>
+          <Button
+            title={saving ? "Sauvegarde..." : "Sauvegarder"}
+            onPress={handleSave}
+            disabled={!isOwner || saving}
+          />
+          <View style={{ height: 8 }} />
+          <Button
+            title="Supprimer"
+            color="red"
+            onPress={handleDelete}
+            disabled={!isOwner}
+          />
+        </View>
+      </ThemedView>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#f3f4f6" },
+  container: {
+    flex: 1,
+    padding: 24,
+    backgroundColor: "#ffffff",
+  },
+  scroll: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 120,
+  },
 
   backButton: {
     alignSelf: "flex-start",
@@ -220,15 +274,26 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 8,
   },
-  backText: { fontSize: 16, fontWeight: "600" },
+  backText: { fontSize: 16, fontWeight: "600", color: "#111827" },
 
-  label: { marginTop: 12, marginBottom: 4, fontWeight: "600" },
+  owner: {
+    marginBottom: 6,
+    color: "#111827",
+    fontWeight: "600",
+  },
+  label: {
+    marginTop: 12,
+    marginBottom: 4,
+    fontWeight: "700",
+    color: "#111827",
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: "#e5e7eb",
     borderRadius: 8,
     padding: 10,
-    backgroundColor: "white",
+    backgroundColor: "#ffffff",
+    color: "#111827",
   },
   textArea: { minHeight: 60, textAlignVertical: "top" },
 
@@ -241,13 +306,19 @@ const styles = StyleSheet.create({
   },
 
   positionRow: {
-    padding: 8,
-    backgroundColor: "white",
-    marginBottom: 6,
-    borderRadius: 8,
+    padding: 10,
+    backgroundColor: "#ffffff",
+    marginBottom: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  positionTitle: { fontWeight: "600" },
-  positionSub: { fontSize: 12, color: "#6b7280" },
+  positionTitle: { fontWeight: "700", color: "#111827" },
+  positionSub: { fontSize: 12, color: "#6b7280", marginTop: 2 },
 
-  buttonsRow: { marginTop: 12 },
+  buttonsRow: {
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: "#ffffff",
+  },
 });

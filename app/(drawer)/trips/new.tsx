@@ -1,17 +1,18 @@
-import { useState, useEffect } from "react";
+import * as Location from "expo-location";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Button,
+  StyleSheet,
   Text,
   TextInput,
-  StyleSheet,
-  Button,
-  Alert,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import * as Location from "expo-location";
 
 import { useTrips } from "@/context/trips-context";
+import type { Position } from "@/services/types";
 
 export default function NewTripScreen() {
   const router = useRouter();
@@ -21,12 +22,16 @@ export default function NewTripScreen() {
   const [description, setDescription] = useState("");
 
   const [recording, setRecording] = useState(false);
-  const [watcher, setWatcher] = useState<Location.LocationSubscription | null>(
-    null
-  );
+  const [watcher, setWatcher] = useState<Location.LocationSubscription | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [tripCreatedAt, setTripCreatedAt] = useState<string | null>(null);
 
-  // Nettoyer le watcher quand l'écran est démonté
+  // Permet de limiter les enregistrements à 1 fois / 5 secondes
+  const lastSavedRef = useRef(0);
+
+  // Nettoyer le watcher quand l'écran se démonte
   useEffect(() => {
     return () => {
       if (watcher) {
@@ -34,6 +39,15 @@ export default function NewTripScreen() {
       }
     };
   }, [watcher]);
+
+  function formatDate(date: Date) {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+      date.getDate()
+    )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+      date.getSeconds()
+    )}`;
+  }
 
   async function startRecording() {
     if (recording) return;
@@ -46,49 +60,61 @@ export default function NewTripScreen() {
     setLoading(true);
 
     try {
-      // 1) Demander la permission
+      // 1) Permission GPS
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission manquante",
-          "Active la localisation pour continuer."
-        );
+        Alert.alert("Permission manquante", "Active la localisation pour continuer.");
         setLoading(false);
         return;
       }
 
-      // 2) Vérifier si le service de localisation est activé
+      // 2) Vérifier si GPS activé
       const enabled = await Location.hasServicesEnabledAsync();
       if (!enabled) {
-        Alert.alert(
-          "GPS désactivé",
-          "Active le GPS sur ton téléphone pour enregistrer le trajet."
-        );
+        Alert.alert("GPS désactivé", "Active le GPS sur ton téléphone.");
         setLoading(false);
         return;
       }
 
-      // 3) Créer le trajet
-      const tripId = await createTrip({
-        name: name.trim(),
-        description: description.trim(),
-      });
+      // Point de départ : réinitialise les positions en mémoire
+      const createdAt = formatDate(new Date());
+      setTripCreatedAt(createdAt);
+      setPositions([]);
+      lastSavedRef.current = 0;
 
-      // 4) Commencer à écouter la position en temps réel
+      // 3) Commencer l'écoute de la position
       const sub = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000, // toutes les 5 secondes
+          accuracy: Location.Accuracy.Balanced, // suffisant + économie batterie
+          timeInterval: 5000, // minimum 5 secondes
           distanceInterval: 0,
         },
         async (loc) => {
-          if (loc?.coords) {
-            console.log("POSITION RECUE :", loc.coords);
-            await addPositionToTrip(tripId, {
+          if (!loc?.coords) return;
+
+          const now = Date.now();
+
+          // throttle manuel — ignore si moins de 5 secondes entre deux save
+          if (now - lastSavedRef.current < 5000) {
+            return;
+          }
+
+          lastSavedRef.current = now;
+
+          console.log("POSITION SAUVEGARDEE :", loc.coords);
+
+          const timestamp = formatDate(
+            new Date(loc.timestamp ?? Date.now())
+          );
+
+          setPositions((prev) => [
+            ...prev,
+            {
               latitude: loc.coords.latitude,
               longitude: loc.coords.longitude,
-            });
-          }
+              timestamp,
+            },
+          ]);
         }
       );
 
@@ -109,8 +135,39 @@ export default function NewTripScreen() {
     setWatcher(null);
     setRecording(false);
 
-    Alert.alert("Terminé", "L’enregistrement du trajet est terminé.");
-    router.replace("/(tabs)/trips");
+    Alert.alert("Terminé", "Tu peux maintenant envoyer le trajet.");
+  }
+
+  async function sendTrip() {
+    if (positions.length === 0) {
+      Alert.alert("Aucune position", "Enregistre au moins un point avant d'envoyer.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      const tripId = await createTrip({
+        name: name.trim(),
+        description: description.trim(),
+        createdAt: tripCreatedAt ?? formatDate(new Date()),
+      });
+
+      for (const pos of positions) {
+        await addPositionToTrip(tripId, {
+          latitude: pos.latitude,
+          longitude: pos.longitude,
+          timestamp: pos.timestamp,
+        });
+      }
+
+      Alert.alert("Succès", "Trajet enregistré avec ses positions.");
+      router.replace("/trips");
+    } catch (err) {
+      console.error("Erreur sendTrip", err);
+      Alert.alert("Erreur", "Impossible d'enregistrer le trajet.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -118,11 +175,7 @@ export default function NewTripScreen() {
       <Text style={styles.title}>Nouveau trajet</Text>
 
       <Text style={styles.label}>Nom du trajet</Text>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-      />
+      <TextInput style={styles.input} value={name} onChangeText={setName} />
 
       <Text style={styles.label}>Description</Text>
       <TextInput
@@ -134,10 +187,24 @@ export default function NewTripScreen() {
 
       {loading ? (
         <ActivityIndicator />
-      ) : !recording ? (
-        <Button title="Démarrer l’enregistrement" onPress={startRecording} />
       ) : (
-        <Button title="Arrêter" color="red" onPress={stopRecording} />
+        <>
+          {!recording ? (
+            <Button title="Démarrer l’enregistrement" onPress={startRecording} />
+          ) : (
+            <Button title="Arrêter" color="red" onPress={stopRecording} />
+          )}
+
+          {!recording && positions.length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              <Button
+                title={sending ? "Envoi..." : "Envoyer le trajet"}
+                onPress={sendTrip}
+                disabled={sending}
+              />
+            </View>
+          )}
+        </>
       )}
     </View>
   );
