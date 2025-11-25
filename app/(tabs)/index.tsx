@@ -54,7 +54,7 @@ export default function TripsListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Mes trajets ({enriched.length})</Text>
+      <Text style={styles.title}>Trajets ({enriched.length})</Text>
 
       <TouchableOpacity
         style={styles.newTripButton}

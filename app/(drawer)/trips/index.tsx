@@ -87,7 +87,7 @@ export default function TripsListScreen() {
   return (
     <ThemedView style={styles.container}>  
 
-      <ThemedText type="title">Mes trajets</ThemedText>
+      <ThemedText type="title">Trajets</ThemedText>
 
       <TouchableOpacity style={styles.newButton} onPress={goToNewTrip}>
         <Text style={styles.newButtonText}>+ Nouveau trajet</Text>

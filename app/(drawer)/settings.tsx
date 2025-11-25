@@ -1,5 +1,5 @@
 import { Link, useRouter } from 'expo-router';
-import { Alert, Button, StyleSheet, View } from 'react-native';
+import { Alert, Button, Keyboard, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -19,15 +19,18 @@ export default function SettingsScreen() {
 
   if (!user) {
     return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <ThemedView style={[styles.container, { paddingTop }]}>
         <ThemedText>Vous n&apos;êtes pas connecté.</ThemedText>
         <Button title="Aller à la connexion" onPress={() => router.replace('/')} />
       </ThemedView>
+    </TouchableWithoutFeedback>
     );
   }
 
   return (
-    <ThemedView style={[styles.container, { paddingTop }]}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <ThemedView style={[styles.container, { paddingTop }]}>
       <ThemedText type="title">Paramètres</ThemedText>
 
       <View style={styles.section}>
@@ -75,7 +78,8 @@ export default function SettingsScreen() {
           <ThemedText type="link">Retour à l&apos;accueil</ThemedText>
         </Link>
       </View>
-    </ThemedView>
+      </ThemedView>
+    </TouchableWithoutFeedback>
   );
 }
 

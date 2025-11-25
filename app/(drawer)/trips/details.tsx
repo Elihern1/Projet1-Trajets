@@ -133,6 +133,12 @@ export default function TripDetailsScreen() {
       : "Utilisateur inconnu";
   const isOwner = trip.userId === user?.id;
 
+  function formatTimestamp(ts: string) {
+    // Stockage au format "yyyy-MM-dd HH:mm:ss" — on force une interprétation locale
+    const normalized = ts.replace(" ", "T");
+    return new Date(normalized).toLocaleString();
+  }
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <ThemedView style={styles.container}>
@@ -201,7 +207,7 @@ export default function TripDetailsScreen() {
             coordinate={{ latitude: start.latitude, longitude: start.longitude }}
             pinColor="green"
             title="Départ"
-            description={new Date(start.timestamp).toLocaleString()}
+            description={formatTimestamp(start.timestamp)}
           />
         )}
 
@@ -211,7 +217,7 @@ export default function TripDetailsScreen() {
             coordinate={{ latitude: end.latitude, longitude: end.longitude }}
             pinColor="red"
             title="Arrivée"
-            description={new Date(end.timestamp).toLocaleString()}
+            description={formatTimestamp(end.timestamp)}
           />
         )}
 
@@ -226,7 +232,7 @@ export default function TripDetailsScreen() {
             #{index + 1} — {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
           </ThemedText>
           <ThemedText style={styles.positionSub}>
-            {new Date(item.timestamp).toLocaleString()}
+            {formatTimestamp(item.timestamp)}
           </ThemedText>
         </View>
       ))}

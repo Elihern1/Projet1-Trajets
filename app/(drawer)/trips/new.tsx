@@ -8,6 +8,8 @@ import {
   StyleSheet,
   TextInput,
   View,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { useFocusEffect } from "expo-router";
@@ -173,6 +175,11 @@ export default function NewTripScreen() {
       }
 
       Alert.alert("Succès", "Trajet enregistré avec ses positions.");
+      setName("");
+      setDescription("");
+      setPositions([]);
+      setTripCreatedAt(null);
+      setRecording(false);
       router.replace("/trips");
     } catch (err) {
       console.error("Erreur sendTrip", err);
@@ -194,7 +201,8 @@ export default function NewTripScreen() {
   }, [positions]);
 
   return (
-    <ThemedView style={styles.container}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>Nouveau trajet</ThemedText>
 
       <ThemedText style={styles.label}>Nom du trajet</ThemedText>
@@ -267,7 +275,8 @@ export default function NewTripScreen() {
           )}
         </>
       )}
-    </ThemedView>
+      </ThemedView>
+    </TouchableWithoutFeedback>
   );
 }
 
