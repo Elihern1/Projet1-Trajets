@@ -1,1 +1,1 @@
-export { default } from "../trips/index";
+export { default } from "../(drawer)/trips/index";
