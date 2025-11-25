@@ -1,6 +1,15 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import {
+  createUser,
+  getUserByEmail,
+  updateUserPassword,
+} from '@/services/database.native';
 import type { User } from '@/services/types';
-import { createUser, getUserByEmail, updateUserPassword } from '@/services/database.native';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  type ReactNode,
+} from 'react';
 
 type RegisterData = {
   firstName: string;
@@ -11,6 +20,7 @@ type RegisterData = {
 
 type AuthContextType = {
   user: User | null;
+  loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   register: (data: RegisterData) => Promise<void>;
@@ -21,15 +31,21 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function login(email: string, password: string) {
-    const existing = await getUserByEmail(email);
+    setLoading(true);
+    try {
+      const existing = await getUserByEmail(email);
 
-    if (!existing || existing.password !== password) {
-      throw new Error('Email ou mot de passe invalide');
+      if (!existing || existing.password !== password) {
+        throw new Error('Email ou mot de passe invalide');
+      }
+
+      setUser(existing);
+    } finally {
+      setLoading(false);
     }
-
-    setUser(existing);
   }
 
   function logout() {
@@ -37,14 +53,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(data: RegisterData) {
-    const existing = await getUserByEmail(data.email);
-    if (existing) {
-      throw new Error('Un compte existe déjà avec cet email');
-    }
+    setLoading(true);
+    try {
+      const existing = await getUserByEmail(data.email);
+      if (existing) {
+        throw new Error('Un compte existe déjà avec cet email');
+      }
 
-    await createUser(data);
-    // ici tu peux choisir de connecter auto l'utilisateur
-    // ou le laisser retourner au login (on va retourner au login)
+      await createUser(data);
+      // Tu peux soit connecter automatiquement, soit laisser revenir au login
+      // Ici on laisse l'utilisateur revenir au login
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function changePassword(oldPwd: string, newPwd: string) {
@@ -64,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        loading,
         login,
         logout,
         register,

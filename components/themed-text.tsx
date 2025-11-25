@@ -2,7 +2,7 @@ import { Text, type TextProps, StyleSheet } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 
 type ThemedTextProps = TextProps & {
-  type?: 'default' | 'title' | 'link';
+  type?: 'default' | 'title' | 'subtitle' | 'link';
 };
 
 export function ThemedText({ style, type = 'default', children, ...rest }: ThemedTextProps) {
@@ -16,6 +16,7 @@ export function ThemedText({ style, type = 'default', children, ...rest }: Theme
         styles.base,
         { color: textColor },
         type === 'title' && styles.title,
+        type === 'subtitle' && styles.subtitle,
         type === 'link' && { color: colors.primary },
         style,
       ]}
@@ -32,5 +33,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '600',
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: '500',
   },
 });

@@ -8,11 +8,10 @@
     "scheme": "projet1trajets",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.Projet1Trajets"
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -20,12 +19,10 @@
       },
       "package": "com.anonymous.Projet1Trajets"
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -40,8 +37,8 @@
           }
         }
       ],
-      "expo-sqlite"    ],
-
+      "expo-sqlite"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
