@@ -1,117 +1,82 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
+  Button,
   Alert,
-  FlatList,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 
 import { useTrips } from "@/context/trips-context";
-import type { Position } from "@/services/types";
-
-type TempPosition = Omit<Position, "id" | "tripId">;
 
 export default function NewTripScreen() {
   const router = useRouter();
-  const { addTripWithPositions } = useTrips();
+  const { createTrip, addPositionToTrip } = useTrips();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [positions, setPositions] = useState<TempPosition[]>([]);
-  const [tracking, setTracking] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Demande une position et l'ajoute au tableau
-  async function capturePosition() {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission refusée", "Active la localisation pour continuer.");
-        stopTracking();
-        return;
-      }
+  const [recording, setRecording] = useState(false);
+  const [watcher, setWatcher] = useState<Location.LocationSubscription | null>(
+    null
+  );
+  const [loading, setLoading] = useState(false);
 
-      const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-      });
-
-      const now = new Date().toISOString().replace("T", " ").split(".")[0];
-
-      const newPos: TempPosition = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        timestamp: now,
-      };
-
-      setPositions((prev) => [...prev, newPos]);
-    } catch (e) {
-      console.error("Erreur GPS:", e);
-      Alert.alert("Erreur", "Impossible de récupérer la position.");
-      stopTracking();
-    }
-  }
-
-  function startTracking() {
-    if (tracking) return;
-    setPositions([]); // on recommence un trajet propre
-    setTracking(true);
-
-    // capture tout de suite une première position
-    capturePosition();
-
-    // puis toutes les 5 secondes
-    intervalRef.current = setInterval(() => {
-      capturePosition();
-    }, 5000);
-  }
-
-  function stopTracking() {
-    setTracking(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }
-
-  useEffect(() => {
-    // nettoyage si on quitte l'écran
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
-
-  async function handleSave() {
+  async function startRecording() {
     if (!name.trim()) {
-      Alert.alert("Nom obligatoire", "Donne un nom au trajet.");
-      return;
-    }
-    if (positions.length === 0) {
-      Alert.alert(
-        "Aucune position",
-        "Commence le suivi GPS pour enregistrer des positions."
-      );
+      Alert.alert("Erreur", "Entre un nom pour le trajet.");
       return;
     }
 
-    try {
-      await addTripWithPositions(name.trim(), description.trim(), positions);
-      Alert.alert("Succès", "Trajet enregistré !");
-      setName("");
-      setDescription("");
-      setPositions([]);
-      stopTracking();
-      router.back(); // retour à la liste
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Erreur", "Impossible d'enregistrer le trajet.");
+    setLoading(true);
+
+    // Permission GPS
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission manquante", "Active la localisation pour continuer.");
+      setLoading(false);
+      return;
     }
+
+    // 1) On crée le trajet dans la BD
+    const tripId = await createTrip({
+      name: name.trim(),
+      description: description.trim(),
+    });
+
+    // 2) On commence à écouter la position en temps réel
+    const sub = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 5000, // toutes les 5 secondes
+        distanceInterval: 0,
+      },
+      async (loc) => {
+        if (loc?.coords) {
+          await addPositionToTrip(tripId, {
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      }
+    );
+
+    setWatcher(sub);
+    setRecording(true);
+    setLoading(false);
+  }
+
+  function stopRecording() {
+    if (watcher) watcher.remove();
+    setWatcher(null);
+    setRecording(false);
+
+    Alert.alert("Terminé", "L’enregistrement du trajet est terminé.");
+    router.replace("/(tabs)/trips");
   }
 
   return (
@@ -123,7 +88,6 @@ export default function NewTripScreen() {
         style={styles.input}
         value={name}
         onChangeText={setName}
-        placeholder="Ex: Trajet vers le travail"
       />
 
       <Text style={styles.label}>Description</Text>
@@ -131,40 +95,16 @@ export default function NewTripScreen() {
         style={[styles.input, styles.textArea]}
         value={description}
         onChangeText={setDescription}
-        placeholder="Optionnel"
         multiline
       />
 
-      <View style={styles.buttonsRow}>
-        <Button
-          title={tracking ? "Arrêter le suivi" : "Démarrer le suivi"}
-          onPress={tracking ? stopTracking : startTracking}
-          color={tracking ? "#b91c1c" : "#15803d"}
-        />
-      </View>
-
-      <Text style={styles.label}>
-        Positions enregistrées : {positions.length}
-      </Text>
-
-      <FlatList
-        data={positions}
-        keyExtractor={(_, index) => String(index)}
-        style={styles.list}
-        renderItem={({ item, index }) => (
-          <View style={styles.positionItem}>
-            <Text style={styles.positionText}>
-              #{index + 1} • {item.latitude.toFixed(5)},{" "}
-              {item.longitude.toFixed(5)}
-            </Text>
-            <Text style={styles.positionSub}>{item.timestamp}</Text>
-          </View>
-        )}
-      />
-
-      <View style={styles.saveButton}>
-        <Button title="Enregistrer le trajet" onPress={handleSave} />
-      </View>
+      {loading ? (
+        <ActivityIndicator />
+      ) : !recording ? (
+        <Button title="Démarrer l’enregistrement" onPress={startRecording} />
+      ) : (
+        <Button title="Arrêter" color="red" onPress={stopRecording} />
+      )}
     </View>
   );
 }
@@ -178,7 +118,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   label: {
     fontSize: 14,
@@ -197,30 +137,5 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 60,
     textAlignVertical: "top",
-  },
-  buttonsRow: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  list: {
-    marginTop: 8,
-    flex: 1,
-  },
-  positionItem: {
-    backgroundColor: "white",
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 6,
-  },
-  positionText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  positionSub: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  saveButton: {
-    marginTop: 8,
   },
 });

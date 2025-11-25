@@ -1,71 +1,74 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-
+import { createContext, useContext, useEffect, useState } from "react";
+import { db, run, getAll } from "@/services/database.native";
 import type { Trip, Position } from "@/services/types";
-import { run, getAll } from "@/services/database.native";
 
 type TripsContextType = {
   trips: Trip[];
   loadTrips: () => Promise<void>;
-  addTripWithPositions: (
-    name: string,
-    description: string,
-    positions: Omit<Position, "id" | "tripId">[]
+  createTrip: (data: { name: string; description: string }) => Promise<number>;
+  addPositionToTrip: (
+    tripId: number,
+    pos: { latitude: number; longitude: number }
   ) => Promise<void>;
-  deleteTrip: (id: number) => Promise<void>;
-  updateTrip: (trip: Trip) => Promise<void>;
   getTripById: (id: number) => Promise<Trip | null>;
-  getPositionsForTrip: (tripId: number) => Promise<Position[]>;
+  getPositionsForTrip: (id: number) => Promise<Position[]>;
+  updateTrip: (trip: Trip) => Promise<void>;
+  deleteTrip: (id: number) => Promise<void>;
 };
 
 const TripsContext = createContext<TripsContextType | undefined>(undefined);
 
-export function useTrips(): TripsContextType {
-  const ctx = useContext(TripsContext);
-  if (!ctx) {
-    throw new Error("useTrips doit être utilisé dans un TripsProvider");
-  }
-  return ctx;
-}
-
-export function TripsProvider({ children }: { children: ReactNode }) {
+export function TripsProvider({ children }: { children: any }) {
   const [trips, setTrips] = useState<Trip[]>([]);
 
   async function loadTrips() {
-    const rows = await getAll<Trip>(
-      "SELECT * FROM trips ORDER BY datetime(createdAt) DESC;"
-    );
+    const rows = await getAll<Trip>("SELECT * FROM trips ORDER BY id DESC;");
     setTrips(rows);
   }
 
-  async function addTripWithPositions(
-    name: string,
-    description: string,
-    positions: Omit<Position, "id" | "tripId">[]
-  ) {
-    const createdAt = new Date().toISOString().replace("T", " ").split(".")[0];
-
-    // INSERT trip
-    const result = await run(
-      "INSERT INTO trips (name, description, createdAt) VALUES (?, ?, ?);",
-      [name, description, createdAt]
+  async function createTrip(data: { name: string; description: string }) {
+    await run(
+      `INSERT INTO trips (name, description, createdAt)
+       VALUES (?, ?, datetime('now'));`,
+      [data.name, data.description]
     );
 
-    const tripId = result.lastInsertRowId as number;
+    const row = await getAll<{ id: number }>(
+      "SELECT id FROM trips ORDER BY id DESC LIMIT 1;"
+    );
 
-    // INSERT positions
-    for (const pos of positions) {
-      await run(
-        "INSERT INTO positions (tripId, latitude, longitude, timestamp) VALUES (?, ?, ?, ?);",
-        [tripId, pos.latitude, pos.longitude, pos.timestamp]
-      );
-    }
+    await loadTrips();
+    return row[0].id;
+  }
 
+  async function addPositionToTrip(
+    tripId: number,
+    pos: { latitude: number; longitude: number }
+  ) {
+    await run(
+      `INSERT INTO positions (tripId, latitude, longitude, timestamp)
+       VALUES (?, ?, ?, datetime('now'));`,
+      [tripId, pos.latitude, pos.longitude]
+    );
+  }
+
+  async function getTripById(id: number) {
+    const rows = await getAll<Trip>("SELECT * FROM trips WHERE id = ?;", [id]);
+    return rows[0] ?? null;
+  }
+
+  async function getPositionsForTrip(id: number) {
+    return await getAll<Position>(
+      "SELECT * FROM positions WHERE tripId = ? ORDER BY id ASC;",
+      [id]
+    );
+  }
+
+  async function updateTrip(trip: Trip) {
+    await run(
+      `UPDATE trips SET name = ?, description = ? WHERE id = ?;`,
+      [trip.name, trip.description, trip.id]
+    );
     await loadTrips();
   }
 
@@ -75,32 +78,8 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     await loadTrips();
   }
 
-  async function updateTrip(trip: Trip) {
-    await run(
-      "UPDATE trips SET name = ?, description = ? WHERE id = ?;",
-      [trip.name, trip.description, trip.id]
-    );
-    await loadTrips();
-  }
-
-  async function getTripById(id: number): Promise<Trip | null> {
-    const rows = await getAll<Trip>(
-      "SELECT * FROM trips WHERE id = ? LIMIT 1;",
-      [id]
-    );
-    return rows[0] ?? null;
-  }
-
-  async function getPositionsForTrip(tripId: number): Promise<Position[]> {
-    const rows = await getAll<Position>(
-      "SELECT * FROM positions WHERE tripId = ? ORDER BY datetime(timestamp) ASC;",
-      [tripId]
-    );
-    return rows;
-  }
-
   useEffect(() => {
-    loadTrips().catch((err) => console.error("loadTrips error:", err));
+    loadTrips().catch((err) => console.error("loadTrips error", err));
   }, []);
 
   return (
@@ -108,14 +87,21 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       value={{
         trips,
         loadTrips,
-        addTripWithPositions,
-        deleteTrip,
-        updateTrip,
+        createTrip,
+        addPositionToTrip,
         getTripById,
         getPositionsForTrip,
+        updateTrip,
+        deleteTrip,
       }}
     >
       {children}
     </TripsContext.Provider>
   );
+}
+
+export function useTrips() {
+  const ctx = useContext(TripsContext);
+  if (!ctx) throw new Error("useTrips must be inside TripsProvider");
+  return ctx;
 }

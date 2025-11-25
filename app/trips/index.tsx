@@ -1,3 +1,4 @@
+// app/trips/index.tsx
 import { useEffect, useState } from "react";
 import {
   View,
@@ -11,7 +12,7 @@ import { useRouter } from "expo-router";
 
 import { useTrips } from "@/context/trips-context";
 import type { Trip } from "@/services/types";
-import { getAll } from "@/services/database.native";   // ⬅️ ici (plus executeSql)
+import { createTables, getAll } from "@/services/database.native";
 
 type TripWithCount = Trip & { positionsCount: number };
 
@@ -21,12 +22,16 @@ export default function TripsListScreen() {
   const [items, setItems] = useState<TripWithCount[]>([]);
 
   async function loadWithCounts() {
-    // Recharge les trajets depuis la BD
+    // S'assure que les tables existent
+    await createTables();
+
+    // Recharge les trajets depuis la BD (met à jour le contexte)
     await loadTrips();
 
-    // Récupère nombre de positions par trajet (nouvelle API)
+    // Récupère le nombre de positions par trajet
     const counts = await getAll<{ tripId: number; count: number }>(
-      "SELECT tripId, COUNT(*) as count FROM positions GROUP BY tripId;"
+      "SELECT tripId, COUNT(*) as count FROM positions GROUP BY tripId;",
+      []
     );
 
     const list: TripWithCount[] = trips.map((t) => {

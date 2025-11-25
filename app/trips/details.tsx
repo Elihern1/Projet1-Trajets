@@ -1,19 +1,40 @@
-import { MapView, Marker, Polyline } from "expo-maps";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Button,
-  FlatList,
-  StyleSheet,
+  View,
   Text,
   TextInput,
-  View,
+  StyleSheet,
+  ActivityIndicator,
+  Button,
+  FlatList,
+  Alert,
+  TouchableOpacity,
 } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useTrips } from "@/context/trips-context";
-import type { Position, Trip } from "@/services/types";
+import type { Trip, Position } from "@/services/types";
+
+const MapView = ({ children }: any) => (
+  <View
+    style={{
+      height: 200,
+      backgroundColor: "#d1d5db",
+      justifyContent: "center",
+      alignItems: "center",
+      borderRadius: 10,
+      marginTop: 8,
+      overflow: "hidden",
+    }}
+  >
+    <Text style={{ color: "#333" }}>Carte non disponible (Expo Go)</Text>
+    {children}
+  </View>
+);
+
+const Marker = () => null;
+const Polyline = () => null;
+/* ------------------------------------------------------------------ */
 
 export default function TripDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -53,8 +74,13 @@ export default function TripDetailsScreen() {
 
   async function handleSave() {
     if (!trip) return;
+
     try {
-      await updateTrip({ ...trip, name: name.trim(), description: description.trim() });
+      await updateTrip({
+        ...trip,
+        name: name.trim(),
+        description: description.trim(),
+      });
       Alert.alert("Succès", "Trajet mis à jour.");
       await load();
     } catch (e) {
@@ -65,26 +91,18 @@ export default function TripDetailsScreen() {
 
   function confirmDelete() {
     if (!trip) return;
-    Alert.alert(
-      "Supprimer le trajet",
-      `Voulez-vous vraiment supprimer "${trip.name}" ?`,
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteTrip(trip.id);
-              router.back();
-            } catch (e) {
-              console.error(e);
-              Alert.alert("Erreur", "Impossible de supprimer le trajet.");
-            }
-          },
+
+    Alert.alert("Supprimer le trajet", `Supprimer "${trip.name}" ?`, [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          await deleteTrip(trip.id);
+          router.back();
         },
-      ]
-    );
+      },
+    ]);
   }
 
   if (loading || !trip) {
@@ -96,24 +114,19 @@ export default function TripDetailsScreen() {
     );
   }
 
-  const hasPositions = positions.length > 0;
-  const first = hasPositions ? positions[0] : null;
-  const coords = positions.map((p) => ({
-    latitude: p.latitude,
-    longitude: p.longitude,
-  }));
-
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Détails du trajet</Text>
+      {/* HEADER ------------------------------------------------------ */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Text style={styles.backText}>← Retour</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Détails du trajet</Text>
+      </View>
 
-      {/* Nom + description modifiables */}
+      {/* FORM -------------------------------------------------------- */}
       <Text style={styles.label}>Nom</Text>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-      />
+      <TextInput style={styles.input} value={name} onChangeText={setName} />
 
       <Text style={styles.label}>Description</Text>
       <TextInput
@@ -123,45 +136,13 @@ export default function TripDetailsScreen() {
         multiline
       />
 
-      {/* Carte */}
+      {/* CARTE ------------------------------------------------------- */}
       <Text style={styles.label}>Carte</Text>
-      {hasPositions && first ? (
-        <MapView
-          style={styles.map}
-          initialCamera={{
-            center: {
-              latitude: first.latitude,
-              longitude: first.longitude,
-            },
-            zoom: 14,
-          }}
-        >
-          {positions.map((p) => (
-            <Marker
-              key={p.id}
-              coordinate={{ latitude: p.latitude, longitude: p.longitude }}
-              title={trip.name}
-              description={p.timestamp}
-            />
-          ))}
+      <MapView />
 
-          {coords.length > 1 && (
-            <Polyline
-              coordinates={coords}
-              strokeWidth={3}
-            />
-          )}
-        </MapView>
-      ) : (
-        <View style={[styles.map, styles.center]}>
-          <Text>Pas encore de positions pour ce trajet.</Text>
-        </View>
-      )}
+      {/* POSITIONS --------------------------------------------------- */}
+      <Text style={styles.label}>Positions ({positions.length})</Text>
 
-      {/* Liste des positions */}
-      <Text style={styles.label}>
-        Positions ({positions.length})
-      </Text>
       <FlatList
         style={styles.list}
         data={positions}
@@ -176,21 +157,25 @@ export default function TripDetailsScreen() {
         )}
       />
 
-      {/* Boutons actions */}
+      {/* ACTIONS ----------------------------------------------------- */}
       <View style={styles.buttonsRow}>
-        <Button title="Sauvegarder" onPress={handleSave} />
+        <Button title="SAUVEGARDER" onPress={handleSave} />
       </View>
+
       <View style={styles.buttonsRow}>
         <Button
-          title="Supprimer le trajet"
-          onPress={confirmDelete}
+          title="SUPPRIMER LE TRAJET"
           color="#b91c1c"
+          onPress={confirmDelete}
         />
       </View>
     </View>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* STYLES */
+/* ------------------------------------------------------------------ */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -202,10 +187,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
+  },
+  backButton: {
+    paddingRight: 8,
+  },
+  backText: {
+    fontSize: 14,
+    color: "#2563eb",
+    fontWeight: "600",
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginLeft: 8,
   },
   label: {
     fontSize: 14,
@@ -224,12 +222,6 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 60,
     textAlignVertical: "top",
-  },
-  map: {
-    height: 200,
-    borderRadius: 12,
-    marginTop: 8,
-    overflow: "hidden",
   },
   list: {
     marginTop: 8,
