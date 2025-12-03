@@ -1,13 +1,13 @@
 export type User = {
-id: number;
-firstName: string;
-lastName: string;
-email: string;
-password: string;
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
 };
 export type Trip = {
   id: number;
-  userId: number | null;
+  userId: string | null;
   name: string;
   description?: string;
   createdAt: string; // 'yyyy-MM-dd HH:mm:ss'

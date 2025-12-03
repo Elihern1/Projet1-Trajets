@@ -17,7 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth-context';
 
 export default function RegisterScreen() {
-  const { register } = useAuth();
+  const { signUp } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
   const primary = colors.primary ?? '#2563eb';
@@ -34,12 +34,12 @@ export default function RegisterScreen() {
     }
 
     try {
-      await register({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim(),
+      await signUp(
+        email.trim(),
         password,
-      });
+        firstName.trim(),
+        lastName.trim()
+      );
 
       Alert.alert('Compte créé', 'Votre compte a été créé, vous pouvez vous connecter.');
       router.replace('/');

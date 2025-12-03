@@ -50,7 +50,7 @@ export default function TripsListScreen() {
   }, [trips]);
 
   function confirmDelete(trip: TripWithCount) {
-    if (trip.userId !== user?.id) {
+    if (trip.userId && user && trip.userId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux supprimer que tes propres trajets."
@@ -104,7 +104,7 @@ export default function TripsListScreen() {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{item.name}</Text>
-              {item.userId === user?.id && (
+              {item.userId === user?.uid && (
                 <TouchableOpacity onPress={() => confirmDelete(item)}>
                   <Text style={styles.deleteText}>Supprimer</Text>
                 </TouchableOpacity>

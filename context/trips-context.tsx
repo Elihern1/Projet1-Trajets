@@ -24,7 +24,7 @@ type TripsContextType = {
 const TripsContext = createContext<TripsContextType | undefined>(undefined);
 
 export function TripsProvider({ children }: { children: any }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
 
   async function loadTrips() {
@@ -37,7 +37,19 @@ export function TripsProvider({ children }: { children: any }) {
         ORDER BY t.id DESC;
       `
     );
-    setTrips(rows);
+
+    const hydrated = rows.map((row) => {
+      if (row.userId === user?.uid) {
+        return {
+          ...row,
+          userFirstName: row.userFirstName ?? profile?.firstName,
+          userLastName: row.userLastName ?? profile?.lastName,
+        };
+      }
+      return row;
+    });
+
+    setTrips(hydrated);
   }
 
   async function createTrip(data: {
@@ -53,7 +65,7 @@ export function TripsProvider({ children }: { children: any }) {
     await run(
       `INSERT INTO trips (userId, name, description, createdAt)
        VALUES (?, ?, ?, COALESCE(?, datetime('now')));`,
-      [user.id, data.name, data.description, data.createdAt ?? null]
+      [user.uid, data.name, data.description, data.createdAt ?? null]
     );
 
     const row = await getAll<{ id: number }>(
@@ -69,13 +81,13 @@ export function TripsProvider({ children }: { children: any }) {
       throw new Error("Vous devez être connecté");
     }
 
-    const ownerRow = await getAll<{ userId: number | null }>(
+    const ownerRow = await getAll<{ userId: string | null }>(
       "SELECT userId FROM trips WHERE id = ?;",
       [tripId]
     );
 
     const ownerId = ownerRow[0]?.userId ?? null;
-    if (ownerId !== user.id) {
+    if (ownerId !== user.uid) {
       throw new Error("Vous ne pouvez modifier que vos trajets.");
     }
   }
@@ -102,7 +114,15 @@ export function TripsProvider({ children }: { children: any }) {
       `,
       [id]
     );
-    return rows[0] ?? null;
+    const trip = rows[0] ?? null;
+    if (trip && trip.userId === user?.uid) {
+      return {
+        ...trip,
+        userFirstName: trip.userFirstName ?? profile?.firstName,
+        userLastName: trip.userLastName ?? profile?.lastName,
+      };
+    }
+    return trip;
   }
 
   async function getPositionsForTrip(id: number) {
@@ -137,7 +157,8 @@ export function TripsProvider({ children }: { children: any }) {
 
   useEffect(() => {
     loadTrips().catch((err) => console.error("loadTrips error", err));
-  }, []);
+    // Recharger quand l'utilisateur change ou quand son profil se charge
+  }, [user?.uid, profile?.firstName, profile?.lastName]);
 
   return (
     <TripsContext.Provider

@@ -1,95 +1,166 @@
-import {
-  createUser,
-  getUserByEmail,
-  updateUserPassword,
-} from '@/services/database.native';
-import type { User } from '@/services/types';
 import React, {
   createContext,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
-} from 'react';
+} from "react";
+import type { User } from "firebase/auth";
 
-type RegisterData = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
+import {
+  getUserProfile,
+  listenToAuthChanges,
+  logout,
+  sendResetPassword,
+  signInWithEmail,
+  signUpWithEmail,
+} from "@/services/firebase";
+
+type UserProfile = {
+  uid: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  createdAt?: unknown;
 };
 
 type AuthContextType = {
   user: User | null;
+  profile: UserProfile | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  register: (data: RegisterData) => Promise<void>;
-  changePassword: (oldPwd: string, newPwd: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<User>;
+  signUp: (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string
+  ) => Promise<User>;
+  signOut: () => Promise<void>;
+  sendResetPassword: (email: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function fetchProfile(
+  uid: string,
+  fallbackEmail?: string
+): Promise<UserProfile | null> {
+  try {
+    const data = await getUserProfile(uid);
+    if (data) {
+      return {
+        uid,
+        firstName: data.firstName as string | undefined,
+        lastName: data.lastName as string | undefined,
+        email: (data.email as string | undefined) ?? fallbackEmail,
+        createdAt: data.createdAt,
+      };
+    }
+    return {
+      uid,
+      email: fallbackEmail,
+    };
+  } catch (err) {
+    console.error("Erreur lors du chargement du profil utilisateur", err);
+    return {
+      uid,
+      email: fallbackEmail,
+    };
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  async function login(email: string, password: string) {
-    setLoading(true);
-    try {
-      const existing = await getUserByEmail(email);
+  useEffect(() => {
+    const unsubscribe = listenToAuthChanges(async (firebaseUser) => {
+      setUser(firebaseUser);
 
-      if (!existing || existing.password !== password) {
-        throw new Error('Email ou mot de passe invalide');
+      if (firebaseUser) {
+        const prof = await fetchProfile(
+          firebaseUser.uid,
+          firebaseUser.email ?? undefined
+        );
+        setProfile(prof);
+      } else {
+        setProfile(null);
       }
 
-      setUser(existing);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  async function signIn(email: string, password: string): Promise<User> {
+    setLoading(true);
+    try {
+      const credUser = await signInWithEmail(email, password);
+      setUser(credUser);
+
+      const prof = await fetchProfile(
+        credUser.uid,
+        credUser.email ?? email
+      );
+      setProfile(prof);
+
+      return credUser;
     } finally {
       setLoading(false);
     }
   }
 
-  function logout() {
-    setUser(null);
-  }
-
-  async function register(data: RegisterData) {
+  async function signUp(
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string
+  ): Promise<User> {
     setLoading(true);
     try {
-      const existing = await getUserByEmail(data.email);
-      if (existing) {
-        throw new Error('Un compte existe déjà avec cet email');
-      }
+      const credUser = await signUpWithEmail(
+        email,
+        password,
+        firstName,
+        lastName
+      );
+      setUser(credUser);
 
-      await createUser(data);
-      // Tu peux soit connecter automatiquement, soit laisser revenir au login
-      // Ici on laisse l'utilisateur revenir au login
+      const prof = await fetchProfile(
+        credUser.uid,
+        credUser.email ?? email
+      );
+      setProfile(prof);
+
+      return credUser;
     } finally {
       setLoading(false);
     }
   }
 
-  async function changePassword(oldPwd: string, newPwd: string) {
-    if (!user) {
-      throw new Error('Vous devez être connecté');
+  async function signOut(): Promise<void> {
+    setLoading(true);
+    try {
+      await logout();
+      setUser(null);
+      setProfile(null);
+    } finally {
+      setLoading(false);
     }
-
-    if (user.password !== oldPwd) {
-      throw new Error('Ancien mot de passe incorrect');
-    }
-
-    await updateUserPassword(user.id, newPwd);
-    setUser({ ...user, password: newPwd });
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        profile,
         loading,
-        login,
-        logout,
-        register,
-        changePassword,
+        signIn,
+        signUp,
+        signOut,
+        sendResetPassword,
       }}
     >
       {children}
@@ -100,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error('useAuth doit être utilisé dans un AuthProvider');
+    throw new Error("useAuth doit être utilisé dans un AuthProvider");
   }
   return ctx;
 }

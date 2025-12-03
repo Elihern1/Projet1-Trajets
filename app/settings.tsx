@@ -7,13 +7,13 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth-context';
 
 export default function SettingsScreen() {
-  const { user, logout } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const router = useRouter();
   const { top } = useSafeAreaInsets();
   const paddingTop = 24 + top;
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await signOut();
     router.replace('/');
   }
 
@@ -35,9 +35,9 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <ThemedText type="subtitle">Profil</ThemedText>
-        <ThemedText>Prénom : {user.firstName}</ThemedText>
-        <ThemedText>Nom : {user.lastName}</ThemedText>
-        <ThemedText>Email : {user.email}</ThemedText>
+        <ThemedText>Prénom : {profile?.firstName ?? 'Inconnu'}</ThemedText>
+        <ThemedText>Nom : {profile?.lastName ?? 'Inconnu'}</ThemedText>
+        <ThemedText>Email : {profile?.email ?? user.email}</ThemedText>
       </View>
 
       <View style={styles.section}>

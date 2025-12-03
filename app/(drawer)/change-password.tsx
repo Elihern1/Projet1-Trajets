@@ -18,16 +18,14 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth-context';
 
 export default function ChangePasswordScreen() {
-  const { changePassword, user } = useAuth();
+  const { sendResetPassword, user } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
   const primary = colors.primary ?? '#2563eb';
   const { top } = useSafeAreaInsets();
   const paddingTop = 20 + top;
 
-  const [oldPwd, setOldPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
+  const [email, setEmail] = useState(user?.email ?? '');
 
   async function handleSubmit() {
     if (!user) {
@@ -35,22 +33,21 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    if (!oldPwd || !newPwd || !confirmPwd) {
-      Alert.alert('Erreur', 'Tous les champs sont obligatoires.');
-      return;
-    }
-
-    if (newPwd !== confirmPwd) {
-      Alert.alert('Erreur', 'La confirmation ne correspond pas au nouveau mot de passe.');
+    const targetEmail = (email || user?.email || '').trim();
+    if (!targetEmail) {
+      Alert.alert('Erreur', 'Renseigne une adresse courriel.');
       return;
     }
 
     try {
-      await changePassword(oldPwd, newPwd);
-      Alert.alert('Succès', 'Mot de passe mis à jour.');
+      await sendResetPassword(targetEmail);
+      Alert.alert(
+        'Email envoyé',
+        "Vérifie ta boîte mail pour réinitialiser ton mot de passe."
+      );
       router.back();
     } catch (e: any) {
-      Alert.alert('Erreur', e.message ?? 'Impossible de changer le mot de passe');
+      Alert.alert('Erreur', e.message ?? "Impossible d'envoyer l'email");
     }
   }
 
@@ -73,10 +70,10 @@ export default function ChangePasswordScreen() {
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <ThemedText type="subtitle">Changer le mot de passe</ThemedText>
+            <ThemedText type="subtitle">Réinitialiser le mot de passe</ThemedText>
 
             <View style={styles.form}>
-              <ThemedText>Ancien mot de passe</ThemedText>
+              <ThemedText>Adresse courriel</ThemedText>
               <TextInput
                 style={[
                   styles.input,
@@ -86,46 +83,11 @@ export default function ChangePasswordScreen() {
                     backgroundColor: colors.background,
                   },
                 ]}
-                secureTextEntry
-                value={oldPwd}
-                onChangeText={setOldPwd}
-                placeholder="••••••••"
-                placeholderTextColor={colors.text}
-                cursorColor={colors.text}
-              />
-
-              <ThemedText>Nouveau mot de passe</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    borderColor: colors.border,
-                    color: colors.text,
-                    backgroundColor: colors.background,
-                  },
-                ]}
-                secureTextEntry
-                value={newPwd}
-                onChangeText={setNewPwd}
-                placeholder="••••••••"
-                placeholderTextColor={colors.text}
-                cursorColor={colors.text}
-              />
-
-              <ThemedText>Confirmer le nouveau mot de passe</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    borderColor: colors.border,
-                    color: colors.text,
-                    backgroundColor: colors.background,
-                  },
-                ]}
-                secureTextEntry
-                value={confirmPwd}
-                onChangeText={setConfirmPwd}
-                placeholder="••••••••"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="email@exemple.com"
                 placeholderTextColor={colors.text}
                 cursorColor={colors.text}
               />
@@ -134,7 +96,9 @@ export default function ChangePasswordScreen() {
                 style={[styles.primaryButton, { backgroundColor: primary }]}
                 onPress={handleSubmit}
               >
-                <ThemedText style={styles.primaryButtonText}>Mettre à jour</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>
+                  Envoyer l'email de réinitialisation
+                </ThemedText>
               </Pressable>
 
               <Pressable

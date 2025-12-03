@@ -74,7 +74,7 @@ export default function TripDetailsScreen() {
 
   async function handleSave() {
     if (!trip) return;
-    if (trip.userId !== user?.id) {
+    if (trip.userId && user && trip.userId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux modifier que tes propres trajets."
@@ -94,7 +94,7 @@ export default function TripDetailsScreen() {
   }
 
   async function handleDelete() {
-    if (trip?.userId !== user?.id) {
+    if (trip?.userId && user && trip.userId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux supprimer que tes propres trajets."
@@ -131,7 +131,7 @@ export default function TripDetailsScreen() {
     trip.userFirstName || trip.userLastName
       ? `${trip.userFirstName ?? ""} ${trip.userLastName ?? ""}`.trim()
       : "Utilisateur inconnu";
-  const isOwner = trip.userId === user?.id;
+  const isOwner = !!user && trip.userId === user.uid;
 
   function formatTimestamp(ts: string) {
     // Stockage au format "yyyy-MM-dd HH:mm:ss" — on force une interprétation locale

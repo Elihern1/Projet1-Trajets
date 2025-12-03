@@ -17,7 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/auth-context';
 
 export default function LoginScreen() {
-  const { user, login } = useAuth();
+  const { user, signIn } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
   const primary = colors.primary ?? '#2563eb';
@@ -41,7 +41,7 @@ export default function LoginScreen() {
     }
 
     try {
-      await login(trimmedEmail, password);
+      await signIn(trimmedEmail, password);
       router.replace('/trips');
     } catch (e: any) {
       Alert.alert('Connexion impossible', e.message ?? 'Erreur inconnue');
