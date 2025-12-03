@@ -12,45 +12,30 @@ import { useRouter } from "expo-router";
 import { useTrips } from "@/context/trips-context";
 import { useAuth } from "@/context/auth-context";
 import type { Trip } from "@/services/types";
-import { createTables, getAll } from "@/services/database.native";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
-
-type TripWithCount = Trip & { positionsCount: number };
 
 export default function TripsListScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { trips, loadTrips, deleteTrip } = useTrips();
-  const [items, setItems] = useState<TripWithCount[]>([]);
-
-  async function loadWithCounts() {
-    // S'assure que les tables existent
-    await createTables();
-
-    // Récupère le nombre de positions par trajet
-    const counts = await getAll<{ tripId: number; count: number }>(
-      "SELECT tripId, COUNT(*) as count FROM positions GROUP BY tripId;",
-      []
-    );
-
-    const list: TripWithCount[] = trips.map((t) => {
-      const found = counts.find((c) => c.tripId === t.id);
-      return {
-        ...t,
-        positionsCount: found ? found.count : 0,
-      };
-    });
-
-    setItems(list);
-  }
+  const { trips, loadTrips, loadMore, deleteTrip, loading } = useTrips();
+  const [selectedType, setSelectedType] = useState<"personnel" | "affaire">(
+    "personnel"
+  );
+  const [items, setItems] = useState<Trip[]>([]);
 
   useEffect(() => {
-    loadWithCounts().catch((err) => console.error("load trips error", err));
+    loadTrips(selectedType).catch((err) =>
+      console.error("load trips error", err)
+    );
+  }, [selectedType]);
+
+  useEffect(() => {
+    setItems(trips);
   }, [trips]);
 
-  function confirmDelete(trip: TripWithCount) {
-    if (trip.userId && user && trip.userId !== user.uid) {
+  function confirmDelete(trip: Trip) {
+    if (trip.ownerId && user && trip.ownerId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux supprimer que tes propres trajets."
@@ -68,14 +53,13 @@ export default function TripsListScreen() {
           style: "destructive",
           onPress: async () => {
             await deleteTrip(trip.id);
-            await loadWithCounts();
           },
         },
       ]
     );
   }
 
-  function openDetails(trip: TripWithCount) {
+  function openDetails(trip: Trip) {
     router.push(`/trips/details?id=${trip.id}`);
 
   }
@@ -88,6 +72,26 @@ export default function TripsListScreen() {
     <ThemedView style={styles.container}>  
 
       <ThemedText type="title">Trajets</ThemedText>
+
+      <View style={styles.tabs}>
+        {(["personnel", "affaire"] as const).map((type) => {
+          const active = selectedType === type;
+          return (
+            <TouchableOpacity
+              key={type}
+              style={[
+                styles.tab,
+                active && { backgroundColor: "#2563eb" },
+              ]}
+              onPress={() => setSelectedType(type)}
+            >
+              <Text style={[styles.tabText, active && { color: "#fff" }]}>
+                {type === "personnel" ? "Personnels" : "Affaires"}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <TouchableOpacity style={styles.newButton} onPress={goToNewTrip}>
         <Text style={styles.newButtonText}>+ Nouveau trajet</Text>
@@ -104,7 +108,7 @@ export default function TripsListScreen() {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{item.name}</Text>
-              {item.userId === user?.uid && (
+              {item.ownerId === user?.uid && (
                 <TouchableOpacity onPress={() => confirmDelete(item)}>
                   <Text style={styles.deleteText}>Supprimer</Text>
                 </TouchableOpacity>
@@ -116,11 +120,9 @@ export default function TripsListScreen() {
             )}
 
             <Text style={styles.meta}>
-              Positions : {item.positionsCount} • Créé par{" "}
-              {item.userFirstName || item.userLastName
-                ? `${item.userFirstName ?? ""} ${item.userLastName ?? ""}`.trim()
-                : "Utilisateur inconnu"}{" "}
-              le {item.createdAt}
+              Type : {item.type ?? "personnel"} • Positions :{" "}
+              {item.positionsCount ?? 0} • Créé le{" "}
+              {new Date(item.createdAt).toLocaleString()}
             </Text>
           </TouchableOpacity>
         )}
@@ -130,6 +132,12 @@ export default function TripsListScreen() {
             créer un.
           </Text>
         }
+        onEndReached={() =>
+          loadMore(selectedType).catch((err) => console.error(err))
+        }
+        onEndReachedThreshold={0.5}
+        refreshing={loading}
+        onRefresh={() => loadTrips(selectedType).catch((err) => console.error(err))}
       />
     </ThemedView>
   );
@@ -193,6 +201,23 @@ const styles = StyleSheet.create({
   deleteText: {
     color: "red",
     fontWeight: "500",
+  },
+  tabs: {
+    flexDirection: "row",
+    gap: 8,
+    marginVertical: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  tabText: {
+    color: "#2563eb",
+    fontWeight: "600",
   },
   description: {
     fontSize: 13,

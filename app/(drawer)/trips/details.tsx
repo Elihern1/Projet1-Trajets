@@ -22,10 +22,9 @@ import { ThemedText } from "@/components/themed-text";
 
 export default function TripDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const tripId = Number(id);
+  const tripId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
   const router = useRouter();
-  const { getTripById, getPositionsForTrip, updateTrip, deleteTrip } =
-    useTrips();
+  const { getTripById, updateTrip, deleteTrip } = useTrips();
   const { user } = useAuth();
 
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -37,10 +36,9 @@ export default function TripDetailsScreen() {
   async function load() {
     try {
       setLoading(true);
-      const t = await getTripById(tripId);
-      const pos = await getPositionsForTrip(tripId);
+      const t = tripId ? await getTripById(tripId) : null;
       setTrip(t);
-      setPositions(pos);
+      setPositions(t?.positions ?? []);
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", "Impossible de charger le trajet.");
@@ -74,7 +72,7 @@ export default function TripDetailsScreen() {
 
   async function handleSave() {
     if (!trip) return;
-    if (trip.userId && user && trip.userId !== user.uid) {
+    if (trip.ownerId && user && trip.ownerId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux modifier que tes propres trajets."
@@ -83,7 +81,10 @@ export default function TripDetailsScreen() {
     }
     try {
       setSaving(true);
-      await updateTrip(trip);
+      await updateTrip(trip.id, {
+        name: trip.name,
+        description: trip.description,
+      });
       Alert.alert("Succès", "Trajet mis à jour.");
     } catch (error) {
       console.error(error);
@@ -94,7 +95,7 @@ export default function TripDetailsScreen() {
   }
 
   async function handleDelete() {
-    if (trip?.userId && user && trip.userId !== user.uid) {
+    if (trip?.ownerId && user && trip.ownerId !== user.uid) {
       Alert.alert(
         "Action non autorisée",
         "Tu ne peux supprimer que tes propres trajets."
@@ -103,19 +104,19 @@ export default function TripDetailsScreen() {
     }
 
     Alert.alert("Supprimer", "Supprimer ce trajet ?", [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
-          await deleteTrip(tripId);
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+          await deleteTrip(trip.id);
           router.back();
         },
       },
     ]);
   }
 
-  if (loading || !trip) {
+  if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
@@ -124,19 +125,26 @@ export default function TripDetailsScreen() {
     );
   }
 
+  if (!loading && !trip) {
+    return (
+      <ThemedView style={styles.center}>
+        <ThemedText>Trajet introuvable.</ThemedText>
+      </ThemedView>
+    );
+  }
+
   // Position départ et arrivée
   const start = positions[0];
   const end = positions[positions.length - 1];
-  const creatorLabel =
-    trip.userFirstName || trip.userLastName
-      ? `${trip.userFirstName ?? ""} ${trip.userLastName ?? ""}`.trim()
-      : "Utilisateur inconnu";
-  const isOwner = !!user && trip.userId === user.uid;
+  const creatorLabel = trip.ownerId === user?.uid ? "toi" : "Utilisateur inconnu";
+  const isOwner = !!user && trip.ownerId === user.uid;
 
   function formatTimestamp(ts: string) {
-    // Stockage au format "yyyy-MM-dd HH:mm:ss" — on force une interprétation locale
-    const normalized = ts.replace(" ", "T");
-    return new Date(normalized).toLocaleString();
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) {
+      return ts;
+    }
+    return date.toLocaleString();
   }
 
   return (

@@ -1,174 +1,157 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { run, getAll, createTables } from "@/services/database.native";
-import type { Trip, Position } from "@/services/types";
+import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
+
+import type { Position, Trip } from "@/services/types";
+import {
+  createTripFS,
+  deleteTripFS,
+  getTripByIdFS,
+  getTripsFS,
+  updateTripFS,
+} from "@/services/trips.firestore";
 import { useAuth } from "./auth-context";
+
+type TripWithPositions = Trip & { positions?: Position[] };
 
 type TripsContextType = {
   trips: Trip[];
-  loadTrips: () => Promise<void>;
+  loading: boolean;
+  currentType: "personnel" | "affaire" | null;
+  loadTrips: (type?: "personnel" | "affaire") => Promise<void>;
+  loadMore: (type?: "personnel" | "affaire") => Promise<void>;
   createTrip: (data: {
     name: string;
     description: string;
-    createdAt?: string;
-  }) => Promise<number>;
-  addPositionToTrip: (
-    tripId: number,
-    pos: { latitude: number; longitude: number; timestamp?: string }
+    type: "personnel" | "affaire";
+    positions?: Position[];
+  }) => Promise<string>;
+  getTripById: (id: string) => Promise<TripWithPositions | null>;
+  updateTrip: (
+    tripId: string,
+    data: Partial<Omit<Trip, "id" | "ownerId" | "positions">>
   ) => Promise<void>;
-  getTripById: (id: number) => Promise<Trip | null>;
-  getPositionsForTrip: (id: number) => Promise<Position[]>;
-  updateTrip: (trip: Trip) => Promise<void>;
-  deleteTrip: (id: number) => Promise<void>;
+  deleteTrip: (id: string) => Promise<void>;
 };
 
 const TripsContext = createContext<TripsContextType | undefined>(undefined);
 
+function mapTrip(doc: any): Trip {
+  return {
+    id: doc.id,
+    ownerId: doc.ownerId,
+    name: doc.name ?? "",
+    description: doc.description ?? "",
+    type: doc.type,
+    positionsCount: doc.positionsCount ?? 0,
+    createdAt: doc.createdAt ?? 0,
+    updatedAt: doc.updatedAt ?? 0,
+    userFirstName: doc.userFirstName,
+    userLastName: doc.userLastName,
+  };
+}
+
 export function TripsProvider({ children }: { children: any }) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [currentType, setCurrentType] = useState<"personnel" | "affaire" | null>(null);
+  const [lastDoc, setLastDoc] =
+    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
 
-  async function loadTrips() {
-    await createTables();
-    const rows = await getAll<Trip>(
-      `
-        SELECT t.*, u.firstName AS userFirstName, u.lastName AS userLastName
-        FROM trips t
-        LEFT JOIN users u ON u.id = t.userId
-        ORDER BY t.id DESC;
-      `
-    );
+  async function loadTrips(type?: "personnel" | "affaire") {
+    if (!user) {
+      setTrips([]);
+      setLastDoc(null);
+      setCurrentType(null);
+      return;
+    }
 
-    const hydrated = rows.map((row) => {
-      if (row.userId === user?.uid) {
-        return {
-          ...row,
-          userFirstName: row.userFirstName ?? profile?.firstName,
-          userLastName: row.userLastName ?? profile?.lastName,
-        };
-      }
-      return row;
-    });
+    setCurrentType(type ?? null);
+    setLoading(true);
+    try {
+      const res = await getTripsFS(10, undefined, type);
+      setTrips(res.trips.map(mapTrip));
+      setLastDoc(res.lastDoc);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    setTrips(hydrated);
+  async function loadMore(type?: "personnel" | "affaire") {
+    if (!user || !lastDoc) return;
+    setLoading(true);
+    try {
+      const res = await getTripsFS(10, lastDoc, type ?? currentType ?? undefined);
+      setTrips((prev) => [...prev, ...res.trips.map(mapTrip)]);
+      setLastDoc(res.lastDoc);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createTrip(data: {
     name: string;
     description: string;
-    createdAt?: string;
+    type: "personnel" | "affaire";
+    positions?: Position[];
   }) {
-    if (!user) {
-      throw new Error("Vous devez être connecté pour créer un trajet");
-    }
-
-    await createTables();
-    await run(
-      `INSERT INTO trips (userId, name, description, createdAt)
-       VALUES (?, ?, ?, COALESCE(?, datetime('now')));`,
-      [user.uid, data.name, data.description, data.createdAt ?? null]
+    const tripId = await createTripFS(
+      data.name,
+      data.description,
+      data.type,
+      data.positions ?? []
     );
-
-    const row = await getAll<{ id: number }>(
-      "SELECT last_insert_rowid() AS id;"
-    );
-
-    await loadTrips();
-    return row[0].id;
+    await loadTrips(currentType ?? data.type);
+    return tripId;
   }
 
-  async function ensureOwnTrip(tripId: number) {
-    if (!user) {
-      throw new Error("Vous devez être connecté");
-    }
+  async function getTripById(id: string) {
+    const res = await getTripByIdFS(id);
+    if (!res) return null;
 
-    const ownerRow = await getAll<{ userId: string | null }>(
-      "SELECT userId FROM trips WHERE id = ?;",
-      [tripId]
-    );
-
-    const ownerId = ownerRow[0]?.userId ?? null;
-    if (ownerId !== user.uid) {
-      throw new Error("Vous ne pouvez modifier que vos trajets.");
-    }
+    const { positions = [], ...rest } = res;
+    return { ...mapTrip({ ...rest, id: res.id }), positions };
   }
 
-  async function addPositionToTrip(
-    tripId: number,
-    pos: { latitude: number; longitude: number; timestamp?: string }
+  async function updateTrip(
+    tripId: string,
+    data: Partial<Omit<Trip, "id" | "ownerId" | "positions">>
   ) {
-    await ensureOwnTrip(tripId);
-    await run(
-      `INSERT INTO positions (tripId, latitude, longitude, timestamp)
-       VALUES (?, ?, ?, COALESCE(?, datetime('now')));`,
-      [tripId, pos.latitude, pos.longitude, pos.timestamp ?? null]
+    await updateTripFS(tripId, data);
+    setTrips((prev) =>
+      prev.map((t) =>
+        t.id === tripId
+          ? {
+              ...t,
+              ...data,
+              updatedAt: Date.now(),
+            }
+          : t
+      )
     );
   }
 
-  async function getTripById(id: number) {
-    const rows = await getAll<Trip>(
-      `
-        SELECT t.*, u.firstName AS userFirstName, u.lastName AS userLastName
-        FROM trips t
-        LEFT JOIN users u ON u.id = t.userId
-        WHERE t.id = ?;
-      `,
-      [id]
-    );
-    const trip = rows[0] ?? null;
-    if (trip && trip.userId === user?.uid) {
-      return {
-        ...trip,
-        userFirstName: trip.userFirstName ?? profile?.firstName,
-        userLastName: trip.userLastName ?? profile?.lastName,
-      };
-    }
-    return trip;
-  }
-
-  async function getPositionsForTrip(id: number) {
-    const rows = await getAll<Position>(
-      "SELECT * FROM positions WHERE tripId = ? ORDER BY id ASC;",
-      [id]
-    );
-
-    // 🔥 Correction : convertir en nombres pour MapView
-    return rows.map((p) => ({
-      ...p,
-      latitude: Number(p.latitude),
-      longitude: Number(p.longitude),
-    }));
-  }
-
-  async function updateTrip(trip: Trip) {
-    await ensureOwnTrip(trip.id);
-    await run(
-      `UPDATE trips SET name = ?, description = ? WHERE id = ?;`,
-      [trip.name, trip.description, trip.id]
-    );
-    await loadTrips();
-  }
-
-  async function deleteTrip(id: number) {
-    await ensureOwnTrip(id);
-    await run("DELETE FROM positions WHERE tripId = ?;", [id]);
-    await run("DELETE FROM trips WHERE id = ?;", [id]);
-    await loadTrips();
+  async function deleteTrip(id: string) {
+    await deleteTripFS(id);
+    setTrips((prev) => prev.filter((t) => t.id !== id));
   }
 
   useEffect(() => {
-    loadTrips().catch((err) => console.error("loadTrips error", err));
-    // Recharger quand l'utilisateur change ou quand son profil se charge
-  }, [user?.uid, profile?.firstName, profile?.lastName]);
+    loadTrips(currentType ?? undefined).catch((err) =>
+      console.error("loadTrips error", err)
+    );
+  }, [user?.uid]);
 
   return (
     <TripsContext.Provider
       value={{
         trips,
+        loading,
+        currentType,
         loadTrips,
+        loadMore,
         createTrip,
-        addPositionToTrip,
         getTripById,
-        getPositionsForTrip,
         updateTrip,
         deleteTrip,
       }}

@@ -21,17 +21,19 @@ import { ThemedText } from "@/components/themed-text";
 
 export default function NewTripScreen() {
   const router = useRouter();
-  const { createTrip, addPositionToTrip } = useTrips();
+  const { createTrip } = useTrips();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [tripType, setTripType] = useState<"personnel" | "affaire">(
+    "personnel"
+  );
 
   const [recording, setRecording] = useState(false);
   const [watcher, setWatcher] = useState<Location.LocationSubscription | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [tripCreatedAt, setTripCreatedAt] = useState<string | null>(null);
 
   // Permet de limiter les enregistrements à 1 fois / 5 secondes
   const lastSavedRef = useRef(0);
@@ -40,7 +42,6 @@ export default function NewTripScreen() {
   useFocusEffect(
     useCallback(() => {
       setPositions([]);
-      setTripCreatedAt(null);
       lastSavedRef.current = 0;
     }, [])
   );
@@ -91,8 +92,6 @@ export default function NewTripScreen() {
       }
 
       // Point de départ : réinitialise les positions en mémoire
-      const createdAt = formatDate(new Date());
-      setTripCreatedAt(createdAt);
       setPositions([]);
       lastSavedRef.current = 0;
 
@@ -160,25 +159,17 @@ export default function NewTripScreen() {
 
     setSending(true);
     try {
-      const tripId = await createTrip({
+      await createTrip({
         name: name.trim(),
         description: description.trim(),
-        createdAt: tripCreatedAt ?? formatDate(new Date()),
+        type: tripType,
+        positions,
       });
-
-      for (const pos of positions) {
-        await addPositionToTrip(tripId, {
-          latitude: pos.latitude,
-          longitude: pos.longitude,
-          timestamp: pos.timestamp,
-        });
-      }
 
       Alert.alert("Succès", "Trajet enregistré avec ses positions.");
       setName("");
       setDescription("");
       setPositions([]);
-      setTripCreatedAt(null);
       setRecording(false);
       router.replace("/trips");
     } catch (err) {
@@ -232,6 +223,34 @@ export default function NewTripScreen() {
             <ThemedText style={styles.hint}>
               Ajoute une courte description pour te souvenir du trajet plus tard.
             </ThemedText>
+
+            <ThemedText style={[styles.label, { marginTop: 14 }]}>
+              Type de trajet
+            </ThemedText>
+            <View style={styles.typeRow}>
+              {(["personnel", "affaire"] as const).map((type) => {
+                const active = tripType === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.typeButton,
+                      active && styles.typeButtonActive,
+                    ]}
+                    onPress={() => setTripType(type)}
+                  >
+                    <Text
+                      style={[
+                        styles.typeButtonText,
+                        active && styles.typeButtonTextActive,
+                      ]}
+                    >
+                      {type === "personnel" ? "Personnel" : "Affaire"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {loading ? (
@@ -366,6 +385,28 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     color: "#6b7280",
+  },
+  typeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  typeButtonActive: {
+    backgroundColor: "#2563eb",
+  },
+  typeButtonText: {
+    color: "#2563eb",
+    fontWeight: "700",
+  },
+  typeButtonTextActive: {
+    color: "#ffffff",
   },
   previewBox: {
     marginTop: 4,

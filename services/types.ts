@@ -6,18 +6,22 @@ export type User = {
   password: string;
 };
 export type Trip = {
-  id: number;
-  userId: string | null;
+  id: string;
+  ownerId: string;
   name: string;
   description?: string;
-  createdAt: string; // 'yyyy-MM-dd HH:mm:ss'
+  type?: "personnel" | "affaire";
+  positionsCount: number;
+  createdAt: number;
+  updatedAt: number;
   userFirstName?: string;
   userLastName?: string;
+  positions?: Position[];
 };
 
 export type Position = {
-  id?: number;
-  tripId?: number;
+  id?: string | number;
+  tripId?: string | number;
   latitude: number;
   longitude: number;
   timestamp: string;
